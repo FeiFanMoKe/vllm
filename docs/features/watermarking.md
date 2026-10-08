@@ -198,8 +198,44 @@ vllm serve MODEL \
 
 ### SynthID-Text
 
-[SynthID-Text](https://www.nature.com/articles/s41586-024-08025-4) is planned but
-not currently implemented.
+[SynthID-Text](https://www.nature.com/articles/s41586-024-08025-4) assigns each
+candidate token a binary g-value vote from each of `synthid_depth` independently
+keyed layers. vLLM implements the non-distortionary variant: the sampling
+distribution is updated layer by layer so that it equals the original
+distribution in expectation over the secret key. Each generated token carries
+evidence from all layers, which keeps the watermark detectable on short texts
+and after some tokens are edited, at a higher per-step compute cost than
+Gumbel-max.
+
+```bash
+vllm serve MODEL \
+  --watermark-config '{"algorithm":"synthid","key":42}'
+```
+
+`synthid_depth` defaults to 30. Larger values strengthen the watermark and
+improve robustness to edits at roughly linear per-step cost; smaller values
+reduce overhead. `context_width` defaults to 4 and must match between
+generation and detection.
+
+Like Gumbel-max, SynthID-Text requires stochastic sampling: greedy requests
+(`temperature=0`) bypass watermarking. There is no native
+speculative-decoding variant; use `allow_target_only_watermarking` as
+described in [Speculative decoding](#speculative-decoding), noting that
+accepted draft tokens dilute the signal.
+
+Detection uses the mean g-value over all layers, with a p-value from the
+binomial null distribution:
+
+```python
+from vllm.v1.watermarking import SynthIDWatermarkDetector
+
+result = SynthIDWatermarkDetector(key=42).detect(token_ids)
+print(result.p_value, result.is_watermarked)
+```
+
+The watermark keys and PRF differ from Google DeepMind's reference
+implementation, so texts watermarked by that implementation (or by Gemini)
+are not detected by this detector, and vice versa.
 
 ## Pseudorandom functions
 
