@@ -18,6 +18,7 @@ import torch
 from vllm.config.watermarking import WatermarkPRFName, derive_watermark_key
 from vllm.v1.watermarking.detector import WatermarkDetector
 from vllm.v1.watermarking.prfs import WatermarkPRF, create_prf
+from vllm.v1.watermarking.prfs.philox import PhiloxPRF
 from vllm.v1.watermarking.watermarker import (
     RandomSampler,
     Watermarker,
@@ -26,6 +27,21 @@ from vllm.v1.watermarking.watermarker import (
 
 _NEG_INF_SUBSTITUTE = -1e12
 _EXACT_BINOMIAL_MAX_N = 100_000
+_UINT32_SIGN_BIT = 2**31
+
+
+def _g_values(
+    prf: WatermarkPRF, contexts: torch.Tensor, tokens: torch.Tensor
+) -> torch.Tensor:
+    """Binary g-value votes as a bool tensor.
+
+    For Philox, ``uniform >= 0.5`` is exactly the sign bit of the raw uint32
+    output (mantissa >= 2**23 after the >> 8 in uint32_to_uniform), so the
+    fp64/fp32 uniform intermediates are skipped entirely.
+    """
+    if isinstance(prf, PhiloxPRF):
+        return prf.uint32(contexts, tokens) >= _UINT32_SIGN_BIT
+    return prf.uniform(contexts, tokens) >= 0.5
 
 
 def _layer_prfs(key: int, depth: int, prf: WatermarkPRFName) -> list[WatermarkPRF]:
@@ -62,36 +78,11 @@ class SynthIDWatermarker(Watermarker):
         logits: torch.Tensor,
         contexts: torch.Tensor,
     ) -> torch.Tensor:
-        """Apply the per-layer expected-g-value update to the logits.
-
-        g-values are computed only over tokens with nonzero probability
-        (finite logits after top-k/top-p): excluded tokens contribute
-        nothing to the update, so gathering the support first avoids one
-        full-vocabulary PRF evaluation per layer. Falls back to the dense
-        path when no truncation is in effect.
-        """
-        vocab_size = logits.shape[-1]
-        # One small device-to-host read per call to size the support.
-        max_support = int(torch.isfinite(logits).sum(dim=-1).max().item())
-        if max_support == vocab_size:
-            vocabulary = torch.arange(vocab_size, device=logits.device)
-            return self._transform_dense(logits, contexts, vocabulary)
-
-        indices = torch.topk(logits, max_support, dim=-1).indices
-        candidate_logits = logits.gather(-1, indices)
-        transformed = self._transform_dense(candidate_logits, contexts, indices)
-        output = torch.full_like(logits.to(torch.float32), _NEG_INF_SUBSTITUTE)
-        return output.scatter(-1, indices, transformed)
-
-    def _transform_dense(
-        self,
-        logits: torch.Tensor,
-        contexts: torch.Tensor,
-        token_ids: torch.Tensor,
-    ) -> torch.Tensor:
+        """Apply the per-layer expected-g-value update to the logits."""
         probs = torch.softmax(logits.to(torch.float32), dim=-1)
+        vocabulary = torch.arange(logits.shape[-1], device=logits.device)
         for layer_prf in self.layer_prfs:
-            g = (layer_prf.uniform(contexts, token_ids) >= 0.5).to(probs.dtype)
+            g = _g_values(layer_prf, contexts, vocabulary)
             g_mass = (g * probs).sum(dim=-1, keepdim=True)
             probs = probs * (1.0 + g - g_mass)
         log_probs = torch.log(probs)
@@ -100,6 +91,22 @@ class SynthIDWatermarker(Watermarker):
             log_probs,
             torch.full_like(log_probs, _NEG_INF_SUBSTITUTE),
         )
+
+    def sample(
+        self,
+        logits: torch.Tensor,
+        contexts: torch.Tensor,
+        random_sampler: RandomSampler | None = None,
+        skip_mask: torch.Tensor | None = None,
+    ) -> WatermarkSample:
+        if random_sampler is None:
+            return super().sample(logits, contexts, random_sampler, skip_mask)
+        transformed = self._transform_logits(logits, contexts)
+        token_ids = random_sampler(transformed)
+        if skip_mask is not None:
+            token_ids = torch.where(skip_mask, random_sampler(logits), token_ids)
+            transformed = torch.where(skip_mask.unsqueeze(-1), logits, transformed)
+        return WatermarkSample(token_ids, transformed)
 
     def _sample_watermarked(
         self,
@@ -111,20 +118,6 @@ class SynthIDWatermarker(Watermarker):
             torch.softmax(transformed, dim=-1), num_samples=1
         ).squeeze(-1)
         return WatermarkSample(token_ids, transformed)
-
-    def _try_sample_mixed(
-        self,
-        logits: torch.Tensor,
-        contexts: torch.Tensor,
-        skip_mask: torch.Tensor,
-        random_sampler: RandomSampler,
-    ) -> WatermarkSample:
-        transformed = self._transform_logits(logits, contexts)
-        token_ids = torch.where(
-            skip_mask, random_sampler(logits), random_sampler(transformed)
-        )
-        output_logits = torch.where(skip_mask.unsqueeze(-1), logits, transformed)
-        return WatermarkSample(token_ids, output_logits)
 
 
 class SynthIDWatermarkDetector(WatermarkDetector):
@@ -155,10 +148,7 @@ class SynthIDWatermarkDetector(WatermarkDetector):
     ) -> torch.Tensor:
         targets = targets.unsqueeze(-1)
         g_values = torch.stack(
-            [
-                (prf.uniform(contexts, targets).squeeze(-1) >= 0.5)
-                for prf in self.layer_prfs
-            ],
+            [_g_values(prf, contexts, targets).squeeze(-1) for prf in self.layer_prfs],
             dim=-1,
         )
         return g_values.to(torch.float64).sum(dim=-1)

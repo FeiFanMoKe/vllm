@@ -55,12 +55,13 @@ def _philox4x32_10(
     return counter_0, counter_1, counter_2, counter_3
 
 
-def _philox_uniform(
+def _philox_uint32(
     key_0_value: int,
     key_1_value: int,
     contexts: torch.Tensor,
     token_ids: torch.Tensor,
 ) -> torch.Tensor:
+    """Raw uint32 outputs (held in int64) of the keyed Philox mapping."""
     contexts = contexts.to(torch.int64) & _UINT32_MASK
     prefix_shape = contexts.shape[:-1]
     device = contexts.device
@@ -122,9 +123,21 @@ def _philox_uniform(
     output = outputs[0]
     for index in range(1, 4):
         output = torch.where(word_index == index, outputs[index], output)
-    return uint32_to_uniform(output)
+    return output
 
 
+def _philox_uniform(
+    key_0_value: int,
+    key_1_value: int,
+    contexts: torch.Tensor,
+    token_ids: torch.Tensor,
+) -> torch.Tensor:
+    return uint32_to_uniform(
+        _philox_uint32(key_0_value, key_1_value, contexts, token_ids)
+    )
+
+
+_compiled_philox_uint32 = torch.compile(_philox_uint32, fullgraph=True, dynamic=True)
 _compiled_philox_uniform = torch.compile(_philox_uniform, fullgraph=True, dynamic=True)
 
 
@@ -137,6 +150,13 @@ class PhiloxPRF(WatermarkPRF):
         if not 0 <= key <= 2**64 - 1:
             raise ValueError("Philox keys must fit in 64 bits")
         self.key = key
+
+    def uint32(self, contexts: torch.Tensor, token_ids: torch.Tensor) -> torch.Tensor:
+        """Raw uint32 outputs (held in int64) before the uniform mapping."""
+        key_words = self.key & _UINT32_MASK, self.key >> 32
+        if contexts.device.type == "cuda":
+            return _compiled_philox_uint32(*key_words, contexts, token_ids)
+        return _philox_uint32(*key_words, contexts, token_ids)
 
     def uniform(self, contexts: torch.Tensor, token_ids: torch.Tensor) -> torch.Tensor:
         key_words = self.key & _UINT32_MASK, self.key >> 32

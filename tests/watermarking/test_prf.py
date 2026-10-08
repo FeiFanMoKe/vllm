@@ -26,6 +26,21 @@ def test_prf_pairs_contexts_with_target_tokens():
     assert PhiloxPRF(42).uniform(contexts, token_ids).shape == (2, 1)
 
 
+def test_philox_uint32_sign_bit_matches_uniform_threshold():
+    """`uniform >= 0.5` must be exactly the sign bit of the raw uint32 output.
+
+    SynthID derives binary g-values from this bit on both the generation and
+    detection paths; any drift between the two forms breaks detection.
+    """
+    contexts = torch.randint(-1, 150000, (64, 4))
+    token_ids = torch.randint(0, 150000, (64, 512))
+    prf = PhiloxPRF(42)
+
+    from_bits = prf.uint32(contexts, token_ids) >= 2**31
+    from_uniform = prf.uniform(contexts, token_ids) >= 0.5
+    assert torch.equal(from_bits, from_uniform)
+
+
 @pytest.mark.skipif(
     not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator"
 )
