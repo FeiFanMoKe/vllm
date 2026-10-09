@@ -45,6 +45,7 @@ WATERMARK_CONFIG_FIELDS = (
     "algorithm",
     "alpha",
     "synthid_depth",
+    "synthid_candidate_cap",
     "context_width",
     "deduplicate_contexts",
     "deduplicate_contexts_max_history",
@@ -98,6 +99,7 @@ class WatermarkingSchemeConfig:
     generation_alpha: float = 0.1
     detection_alpha: float = 0.1
     synthid_depth: int = 30
+    synthid_candidate_cap: int | None = 4096
     generation_deduplicate_contexts: WatermarkContextScope = "single_turn"
     generation_deduplicate_contexts_max_history: int | None = 8192
     detection_deduplicate_contexts: bool = True
@@ -211,6 +213,7 @@ class WatermarkingCandidate:
                 "generation_alpha": self.scheme_config.generation_alpha,
                 "detection_alpha": self.scheme_config.detection_alpha,
                 "synthid_depth": self.scheme_config.synthid_depth,
+                "synthid_candidate_cap": self.scheme_config.synthid_candidate_cap,
                 "generation_deduplicate_contexts": (
                     self.scheme_config.generation_deduplicate_contexts
                 ),
@@ -353,6 +356,7 @@ class WatermarkingCandidate:
             key=self.key,
             alpha=self.scheme_config.generation_alpha,
             synthid_depth=self.scheme_config.synthid_depth,
+            synthid_candidate_cap=self.scheme_config.synthid_candidate_cap,
             context_width=self.scheme_config.context_width,
             deduplicate_contexts=(self.scheme_config.generation_deduplicate_contexts),
             deduplicate_contexts_max_history=(
@@ -450,6 +454,7 @@ def _candidate(
     generation_alpha: float = 0.1,
     detection_alpha: float | None = None,
     synthid_depth: int = 30,
+    synthid_candidate_cap: int | None = 4096,
     generation_deduplicate_contexts: WatermarkContextScope = "single_turn",
     generation_deduplicate_contexts_max_history: int | None = 8192,
     detection_deduplicate_contexts: bool = True,
@@ -466,6 +471,7 @@ def _candidate(
                 generation_alpha if detection_alpha is None else detection_alpha
             ),
             synthid_depth=synthid_depth,
+            synthid_candidate_cap=synthid_candidate_cap,
             generation_deduplicate_contexts=generation_deduplicate_contexts,
             generation_deduplicate_contexts_max_history=(
                 generation_deduplicate_contexts_max_history

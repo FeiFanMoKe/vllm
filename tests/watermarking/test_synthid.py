@@ -49,9 +49,7 @@ def _random_logits(batch: int, vocab: int, seed: int) -> torch.Tensor:
 def test_transform_matches_reference_implementation():
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
     logits = _random_logits(3, VOCAB_SIZE, seed=0)
-    contexts = torch.randint(
-        0, VOCAB_SIZE, (3, CONTEXT_WIDTH), generator=torch.Generator().manual_seed(52)
-    )
+    contexts = torch.randint(0, VOCAB_SIZE, (3, CONTEXT_WIDTH))
     expected = _naive_expected_g_update(logits, contexts, watermarker)
     actual = watermarker._transform_logits(logits, contexts)
     assert torch.allclose(actual, expected, atol=1e-5)
@@ -62,37 +60,48 @@ def test_transform_preserves_truncated_support():
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
     logits = _random_logits(2, VOCAB_SIZE, seed=1)
     logits[:, VOCAB_SIZE // 2 :] = float("-inf")
-    contexts = torch.randint(
-        0, VOCAB_SIZE, (2, CONTEXT_WIDTH), generator=torch.Generator().manual_seed(63)
-    )
+    contexts = torch.randint(0, VOCAB_SIZE, (2, CONTEXT_WIDTH))
     transformed = watermarker._transform_logits(logits, contexts)
     assert (transformed[:, VOCAB_SIZE // 2 :] <= -1e11).all()
     assert (transformed[:, : VOCAB_SIZE // 2] > -1e11).any()
 
 
-def test_sparse_support_path_matches_reference():
-    """With top-k truncation, the gathered-support path must produce the same
-    update as the reference full-vocabulary computation."""
-    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
-    logits = _random_logits(3, VOCAB_SIZE, seed=11)
-    top_k = 50
-    cutoff = torch.topk(logits, top_k, dim=-1).values[:, -1:]
-    logits = torch.where(
-        logits < cutoff, torch.full_like(logits, float("-inf")), logits
-    )
-    contexts = torch.randint(
-        0, VOCAB_SIZE, (3, CONTEXT_WIDTH), generator=torch.Generator().manual_seed(79)
-    )
-    expected = _naive_expected_g_update(logits, contexts, watermarker)
-    actual = watermarker._transform_logits(logits, contexts)
-    assert torch.allclose(actual, expected, atol=1e-5)
+def test_capped_path_exact_when_support_fits_cap():
+    """With support <= cap < vocab, the capped path must match the exact
+    full-vocabulary computation everywhere."""
+    capped = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH, candidate_cap=300)
+    exact = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH, candidate_cap=None)
+    logits = _random_logits(2, VOCAB_SIZE, seed=3)
+    logits[:, 256:] = float("-inf")
+    contexts = torch.randint(0, VOCAB_SIZE, (2, CONTEXT_WIDTH))
+    compact = capped._transform_logits(logits, contexts)
+    reference = exact._transform_logits(logits, contexts)
+    assert torch.allclose(compact, reference, atol=1e-5)
+
+
+def test_capped_path_preserves_tail_shape_and_normalization():
+    """With support > cap, tail tokens keep their relative probabilities
+    (they are only neutralized, not truncated) and the result stays a
+    proper distribution."""
+    capped = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH, candidate_cap=64)
+    logits = _random_logits(2, VOCAB_SIZE, seed=4)
+    contexts = torch.randint(0, VOCAB_SIZE, (2, CONTEXT_WIDTH))
+    transformed = capped._transform_logits(logits, contexts)
+    out_probs = torch.softmax(transformed, dim=-1)
+    assert torch.allclose(out_probs.sum(dim=-1), torch.ones(2), atol=1e-5)
+    base_probs = torch.softmax(logits, dim=-1)
+    top_indices = logits.topk(64, dim=-1).indices
+    tail_mask = torch.ones_like(logits, dtype=torch.bool)
+    tail_mask.scatter_(-1, top_indices, False)
+    ratios = out_probs[tail_mask] / base_probs[tail_mask]
+    per_row = ratios.split(VOCAB_SIZE - 64)
+    for row_ratios in per_row:
+        assert row_ratios.max().item() / row_ratios.min().item() < 1.001
 
 
 def test_g_values_deterministic_and_balanced_across_layers():
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
-    contexts = torch.randint(
-        0, VOCAB_SIZE, (64, CONTEXT_WIDTH), generator=torch.Generator().manual_seed(87)
-    )
+    contexts = torch.randint(0, VOCAB_SIZE, (64, CONTEXT_WIDTH))
     vocabulary = torch.arange(VOCAB_SIZE)
     for layer_prf in watermarker.layer_prfs[:5]:
         uniforms = layer_prf.uniform(contexts, vocabulary)
@@ -103,9 +112,7 @@ def test_g_values_deterministic_and_balanced_across_layers():
 
 def test_layer_keys_produce_independent_g_values():
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
-    contexts = torch.randint(
-        0, VOCAB_SIZE, (256, CONTEXT_WIDTH), generator=torch.Generator().manual_seed(98)
-    )
+    contexts = torch.randint(0, VOCAB_SIZE, (256, CONTEXT_WIDTH))
     vocabulary = torch.arange(VOCAB_SIZE)
     g = torch.stack(
         [
