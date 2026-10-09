@@ -36,6 +36,11 @@ class WatermarkConfig:
     """Probability of selecting key B for dual-key watermarking."""
     synthid_depth: int = Field(default=30, ge=1)
     """Number of independently keyed g-value layers for SynthID-Text."""
+    synthid_candidate_cap: int | None = Field(default=4096, ge=1)
+    """Number of top-probability candidates each SynthID-Text layer scores
+    per step. Exact whenever the post top-k/top-p support fits under the
+    cap; a larger support keeps its tail unwatermarked, diluting the signal
+    in proportion to the tail mass. `None` scores the full vocabulary."""
     context_width: int = Field(default=4, ge=1)
     """Number of prior tokens used by the watermark PRF."""
     deduplicate_contexts: WatermarkContextScope = "single_turn"

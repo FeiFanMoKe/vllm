@@ -217,6 +217,14 @@ improve robustness to edits at roughly linear per-step cost; smaller values
 reduce overhead. `context_width` defaults to 4 and must match between
 generation and detection.
 
+`synthid_candidate_cap` bounds how many top-probability candidates each
+layer scores per step and defaults to 4096. The result is exact whenever
+the post top-k/top-p support fits under the cap (which always holds for
+`top_k` up to 4096); a larger support keeps its tail nearly neutral, so
+sampling still covers the full distribution at a signal dilution bounded
+by the tail mass. Set it to `null` to score the full vocabulary exactly at
+higher per-step cost.
+
 Like Gumbel-max, SynthID-Text requires stochastic sampling: greedy requests
 (`temperature=0`) bypass watermarking. There is no native
 speculative-decoding variant; use `allow_target_only_watermarking` as

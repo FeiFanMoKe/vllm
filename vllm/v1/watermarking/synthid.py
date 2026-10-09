@@ -60,6 +60,7 @@ class SynthIDWatermarker(Watermarker):
         context_width: int = 4,
         depth: int = 30,
         prf: WatermarkPRFName = "philox",
+        candidate_cap: int | None = 4096,
     ) -> None:
         if context_width < 1:
             raise ValueError("context_width must be positive")
@@ -68,6 +69,7 @@ class SynthIDWatermarker(Watermarker):
         self.layer_prfs = _layer_prfs(key, depth, prf)
         self.depth = depth
         self._context_width = context_width
+        self.candidate_cap = candidate_cap
 
     @property
     def context_width(self) -> int:
@@ -78,19 +80,56 @@ class SynthIDWatermarker(Watermarker):
         logits: torch.Tensor,
         contexts: torch.Tensor,
     ) -> torch.Tensor:
-        """Apply the per-layer expected-g-value update to the logits."""
+        """Apply the per-layer expected-g-value update to the logits.
+
+        With a candidate cap, layers score only the top-cap candidates; the
+        remaining tail is treated as neutral (g = E[g] = 0.5), so its
+        relative probabilities are preserved and sampling still covers the
+        full support. The result is exact whenever the post top-k/top-p
+        support fits under the cap; a larger support dilutes the signal in
+        proportion to the tail mass.
+        """
         probs = torch.softmax(logits.to(torch.float32), dim=-1)
-        vocabulary = torch.arange(logits.shape[-1], device=logits.device)
-        for layer_prf in self.layer_prfs:
-            g = _g_values(layer_prf, contexts, vocabulary)
-            g_mass = (g * probs).sum(dim=-1, keepdim=True)
-            probs = probs * (1.0 + g - g_mass)
+        if self.candidate_cap is None or self.candidate_cap >= logits.shape[-1]:
+            vocabulary = torch.arange(logits.shape[-1], device=logits.device)
+            probs = self._update_probs(probs, contexts, vocabulary)
+        else:
+            probs = self._update_probs_capped(probs, contexts)
         log_probs = torch.log(probs)
         return torch.where(
             torch.isfinite(log_probs),
             log_probs,
             torch.full_like(log_probs, _NEG_INF_SUBSTITUTE),
         )
+
+    def _update_probs_capped(
+        self,
+        probs: torch.Tensor,
+        contexts: torch.Tensor,
+    ) -> torch.Tensor:
+        assert self.candidate_cap is not None
+        top_probs, top_indices = probs.topk(self.candidate_cap, dim=-1)
+        tail_mass = 1 - top_probs.sum(dim=-1, keepdim=True)
+        tail_scale = torch.ones_like(tail_mass)
+        for layer_prf in self.layer_prfs:
+            g = _g_values(layer_prf, contexts, top_indices)
+            g_mass = (g * top_probs).sum(dim=-1, keepdim=True) + 0.5 * tail_mass
+            top_probs = top_probs * (1.0 + g - g_mass)
+            tail_scale = tail_scale * (1.5 - g_mass)
+        probs = probs * tail_scale
+        return probs.scatter(-1, top_indices, top_probs)
+
+    def _update_probs(
+        self,
+        probs: torch.Tensor,
+        contexts: torch.Tensor,
+        tokens: torch.Tensor,
+    ) -> torch.Tensor:
+        for layer_prf in self.layer_prfs:
+            g = _g_values(layer_prf, contexts, tokens)
+            g_mass = (g * probs).sum(dim=-1, keepdim=True)
+            probs = probs * (1.0 + g - g_mass)
+        return probs
 
     def sample(
         self,

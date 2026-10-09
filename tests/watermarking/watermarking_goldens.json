@@ -24,6 +24,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -123,6 +124,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -158,6 +160,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -257,6 +260,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -292,6 +296,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -391,6 +396,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -426,6 +432,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -525,6 +532,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -560,6 +568,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.003,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -603,6 +612,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -638,6 +648,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -737,6 +748,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -772,6 +784,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -871,6 +884,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -906,6 +920,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -989,6 +1004,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1024,6 +1040,7 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1107,6 +1124,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1142,6 +1160,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1241,6 +1260,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1276,6 +1296,7 @@
           "generation_deduplicate_contexts": "none",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1375,6 +1396,7 @@
           "deduplicate_contexts": "none",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1410,6 +1432,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1509,6 +1532,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1544,6 +1568,7 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1643,6 +1668,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1684,6 +1710,7 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1783,6 +1810,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1818,6 +1846,7 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": null,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1917,6 +1946,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": null,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -1952,6 +1982,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": null,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2051,6 +2082,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": null,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2086,6 +2118,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2185,6 +2218,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2220,6 +2254,7 @@
           "generation_deduplicate_contexts": "none",
           "generation_deduplicate_contexts_max_history": null,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2319,6 +2354,7 @@
           "deduplicate_contexts": "none",
           "deduplicate_contexts_max_history": null,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2354,6 +2390,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.0015,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2397,6 +2434,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2432,6 +2470,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2531,6 +2570,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2566,6 +2606,7 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2665,6 +2706,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2700,6 +2742,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2783,6 +2826,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2818,6 +2862,7 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2901,6 +2946,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -2936,6 +2982,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -3035,6 +3082,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -3070,6 +3118,7 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -3169,6 +3218,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -3204,6 +3254,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -3303,6 +3354,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 30
         }
       },
@@ -3338,6 +3390,7 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 8
         }
       },
@@ -3437,6 +3490,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_candidate_cap": 4096,
           "synthid_depth": 8
         }
       },
