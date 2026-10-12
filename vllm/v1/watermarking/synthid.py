@@ -18,7 +18,7 @@ import torch
 from vllm.config.watermarking import WatermarkPRFName, derive_watermark_key
 from vllm.v1.watermarking.detector import WatermarkDetector
 from vllm.v1.watermarking.prfs import WatermarkPRF, create_prf
-from vllm.v1.watermarking.prfs.philox import PhiloxPRF
+from vllm.v1.watermarking.prfs.philox import PhiloxPRF, philox_uint32_multikey
 from vllm.v1.watermarking.watermarker import (
     RandomSampler,
     Watermarker,
@@ -70,6 +70,38 @@ class SynthIDWatermarker(Watermarker):
         self.depth = depth
         self._context_width = context_width
         self.candidate_cap = candidate_cap
+        self._multikey: tuple[torch.Tensor, torch.Tensor] | None = None
+        self._multikey_device: tuple[torch.Tensor, torch.Tensor] | None = None
+        if all(isinstance(p, PhiloxPRF) for p in self.layer_prfs):
+            keys_0 = torch.tensor(
+                [p.key & (2**32 - 1) for p in self.layer_prfs], dtype=torch.int64
+            )
+            keys_1 = torch.tensor(
+                [p.key >> 32 for p in self.layer_prfs], dtype=torch.int64
+            )
+            self._multikey = (keys_0, keys_1)
+
+    def _all_layer_g_values(
+        self, contexts: torch.Tensor, tokens: torch.Tensor
+    ) -> torch.Tensor:
+        """Binary g-values for all layers stacked as (depth, batch, candidates).
+
+        Every layer's (key, context, token) inputs are identical to the
+        per-layer loop, so the stacked values are bit-identical; only the
+        PRF evaluation is batched across layers.
+        """
+        if self._multikey is not None:
+            keys = self._multikey_device
+            if keys is None or keys[0].device != contexts.device:
+                keys = tuple(
+                    k.to(contexts.device) for k in self._multikey
+                )
+                self._multikey_device = keys
+            return (
+                philox_uint32_multikey(keys[0], keys[1], contexts, tokens)
+                >= _UINT32_SIGN_BIT
+            )
+        return torch.stack([_g_values(p, contexts, tokens) for p in self.layer_prfs])
 
     @property
     def context_width(self) -> int:
@@ -87,37 +119,52 @@ class SynthIDWatermarker(Watermarker):
         relative probabilities are preserved and sampling still covers the
         full support. The result is exact whenever the post top-k/top-p
         support fits under the cap; a larger support dilutes the signal in
-        proportion to the tail mass.
+        proportion to the tail mass. The capped path works in the log domain:
+        the multiplicative update ``p *= (1 + g - E[g])`` becomes the additive
+        ``logp += log1p(g - E[g])``, so the full vocabulary is touched only
+        for one logsumexp reduction and one write-back pass.
         """
-        probs = torch.softmax(logits.to(torch.float32), dim=-1)
         if self.candidate_cap is None or self.candidate_cap >= logits.shape[-1]:
+            probs = torch.softmax(logits.to(torch.float32), dim=-1)
             vocabulary = torch.arange(logits.shape[-1], device=logits.device)
             probs = self._update_probs(probs, contexts, vocabulary)
-        else:
-            probs = self._update_probs_capped(probs, contexts)
-        log_probs = torch.log(probs)
-        return torch.where(
-            torch.isfinite(log_probs),
-            log_probs,
-            torch.full_like(log_probs, _NEG_INF_SUBSTITUTE),
-        )
+            log_probs = torch.log(probs)
+            return torch.where(
+                torch.isfinite(log_probs),
+                log_probs,
+                torch.full_like(log_probs, _NEG_INF_SUBSTITUTE),
+            )
+        return self._transform_logits_capped(logits, contexts)
 
-    def _update_probs_capped(
+    def _transform_logits_capped(
         self,
-        probs: torch.Tensor,
+        logits: torch.Tensor,
         contexts: torch.Tensor,
     ) -> torch.Tensor:
-        assert self.candidate_cap is not None
-        top_probs, top_indices = probs.topk(self.candidate_cap, dim=-1)
-        tail_mass = 1 - top_probs.sum(dim=-1, keepdim=True)
-        tail_scale = torch.ones_like(tail_mass)
-        for layer_prf in self.layer_prfs:
-            g = _g_values(layer_prf, contexts, top_indices)
-            g_mass = (g * top_probs).sum(dim=-1, keepdim=True) + 0.5 * tail_mass
-            top_probs = top_probs * (1.0 + g - g_mass)
-            tail_scale = tail_scale * (1.5 - g_mass)
-        probs = probs * tail_scale
-        return probs.scatter(-1, top_indices, top_probs)
+        logits = logits.to(torch.float32)
+        lse = logits.logsumexp(dim=-1, keepdim=True)
+        top_logits, top_indices = logits.topk(self.candidate_cap, dim=-1)
+        logp_top = top_logits - lse
+        top_lse = top_logits.logsumexp(dim=-1)
+        tail_mass = 1 - torch.exp(top_lse - lse.squeeze(-1))
+        tail_logscale = torch.zeros_like(tail_mass)
+        g_all = self._all_layer_g_values(contexts, top_indices)
+        for g in g_all.unbind(0):
+            g_mass = (g * logp_top.exp()).sum(dim=-1) + 0.5 * tail_mass
+            logp_top = logp_top + torch.log1p(
+                g.to(logp_top.dtype) - g_mass.unsqueeze(-1)
+            )
+            tail_logscale = tail_logscale + torch.log(1.5 - g_mass)
+        logp_top = torch.where(
+            torch.isfinite(logp_top),
+            logp_top,
+            torch.full_like(logp_top, _NEG_INF_SUBSTITUTE),
+        )
+        out = (logits - lse + tail_logscale.unsqueeze(-1)).clamp_min(
+            _NEG_INF_SUBSTITUTE
+        )
+        out = out.scatter(-1, top_indices, logp_top)
+        return out
 
     def _update_probs(
         self,
@@ -125,8 +172,7 @@ class SynthIDWatermarker(Watermarker):
         contexts: torch.Tensor,
         tokens: torch.Tensor,
     ) -> torch.Tensor:
-        for layer_prf in self.layer_prfs:
-            g = _g_values(layer_prf, contexts, tokens)
+        for g in self._all_layer_g_values(contexts, tokens).unbind(0):
             g_mass = (g * probs).sum(dim=-1, keepdim=True)
             probs = probs * (1.0 + g - g_mass)
         return probs
