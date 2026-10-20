@@ -51,6 +51,20 @@ def _layer_prfs(key: int, depth: int, prf: WatermarkPRFName) -> list[WatermarkPR
     ]
 
 
+def _layer_multikey(
+    layer_prfs: list[WatermarkPRF],
+) -> tuple[torch.Tensor, torch.Tensor] | None:
+    """Stacked (keys_0, keys_1) for batched multikey PRF, or None if any
+    layer is not a PhiloxPRF."""
+    if all(isinstance(p, PhiloxPRF) for p in layer_prfs):
+        keys_0 = torch.tensor(
+            [p.key & (2**32 - 1) for p in layer_prfs], dtype=torch.int64
+        )
+        keys_1 = torch.tensor([p.key >> 32 for p in layer_prfs], dtype=torch.int64)
+        return keys_0, keys_1
+    return None
+
+
 class SynthIDWatermarker(Watermarker):
     """Non-distortionary SynthID-Text tournament watermarker."""
 
@@ -70,16 +84,10 @@ class SynthIDWatermarker(Watermarker):
         self.depth = depth
         self._context_width = context_width
         self.candidate_cap = candidate_cap
-        self._multikey: tuple[torch.Tensor, torch.Tensor] | None = None
+        self._multikey: tuple[torch.Tensor, torch.Tensor] | None = _layer_multikey(
+            self.layer_prfs
+        )
         self._multikey_device: tuple[torch.Tensor, torch.Tensor] | None = None
-        if all(isinstance(p, PhiloxPRF) for p in self.layer_prfs):
-            keys_0 = torch.tensor(
-                [p.key & (2**32 - 1) for p in self.layer_prfs], dtype=torch.int64
-            )
-            keys_1 = torch.tensor(
-                [p.key >> 32 for p in self.layer_prfs], dtype=torch.int64
-            )
-            self._multikey = (keys_0, keys_1)
 
     def _all_layer_g_values(
         self, contexts: torch.Tensor, tokens: torch.Tensor
@@ -125,14 +133,13 @@ class SynthIDWatermarker(Watermarker):
         for one logsumexp reduction and one write-back pass.
         """
         if self.candidate_cap is None or self.candidate_cap >= logits.shape[-1]:
-            probs = torch.softmax(logits.to(torch.float32), dim=-1)
+            logp = logits.to(torch.float32).log_softmax(dim=-1)
             vocabulary = torch.arange(logits.shape[-1], device=logits.device)
-            probs = self._update_probs(probs, contexts, vocabulary)
-            log_probs = torch.log(probs)
+            logp = self._update_log_probs(logp, contexts, vocabulary)
             return torch.where(
-                torch.isfinite(log_probs),
-                log_probs,
-                torch.full_like(log_probs, _NEG_INF_SUBSTITUTE),
+                torch.isfinite(logp),
+                logp,
+                torch.full_like(logp, _NEG_INF_SUBSTITUTE),
             )
         return self._transform_logits_capped(logits, contexts)
 
@@ -167,16 +174,23 @@ class SynthIDWatermarker(Watermarker):
         out = out.scatter(-1, top_indices, logp_top)
         return out
 
-    def _update_probs(
+    def _update_log_probs(
         self,
-        probs: torch.Tensor,
+        logp: torch.Tensor,
         contexts: torch.Tensor,
         tokens: torch.Tensor,
     ) -> torch.Tensor:
+        """Log-domain per-layer update over the full vocabulary.
+
+        Working in log space avoids the fp32 underflow to zero (and the
+        resulting -1e12 clamping and normalization drift) that the
+        probability-domain multiplicative update hits for tokens the
+        watermark pushes below ~1e-38.
+        """
         for g in self._all_layer_g_values(contexts, tokens).unbind(0):
-            g_mass = (g * probs).sum(dim=-1, keepdim=True)
-            probs = probs * (1.0 + g - g_mass)
-        return probs
+            g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
+            logp = logp + torch.log1p(g.to(logp.dtype) - g_mass)
+        return logp
 
     def sample(
         self,
@@ -228,11 +242,16 @@ class SynthIDWatermarkDetector(WatermarkDetector):
         super().__init__(context_width, p_value_threshold, deduplicate_contexts)
         self.layer_prfs = _layer_prfs(key, depth, prf)
         self.depth = depth
+        self._multikey = _layer_multikey(self.layer_prfs)
 
     def _score_tokens(
         self, contexts: torch.Tensor, targets: torch.Tensor
     ) -> torch.Tensor:
         targets = targets.unsqueeze(-1)
+        if self._multikey is not None:
+            keys_0, keys_1 = self._multikey
+            g = philox_uint32_multikey(keys_0, keys_1, contexts, targets)
+            return (g >= _UINT32_SIGN_BIT).squeeze(-1).to(torch.float64).sum(dim=0)
         g_values = torch.stack(
             [_g_values(prf, contexts, targets).squeeze(-1) for prf in self.layer_prfs],
             dim=-1,
