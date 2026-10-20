@@ -155,6 +155,7 @@ class SynthIDWatermarker(Watermarker):
                 g.to(logp_top.dtype) - g_mass.unsqueeze(-1)
             )
             tail_logscale = tail_logscale + torch.log(1.5 - g_mass)
+            tail_mass = tail_mass * (1.5 - g_mass)
         logp_top = torch.where(
             torch.isfinite(logp_top),
             logp_top,
