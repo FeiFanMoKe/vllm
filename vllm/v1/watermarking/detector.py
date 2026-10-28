@@ -19,6 +19,8 @@ class WatermarkDetection:
 
 
 class WatermarkDetector(ABC):
+    skip_partial_contexts: bool = False
+
     def __init__(
         self,
         context_width: int,
@@ -58,6 +60,11 @@ class WatermarkDetector(ABC):
         prefix = [-1] * self.context_width
         for token_id in token_ids:
             context = tuple(prefix[-self.context_width :])
+            # The first `context_width` positions have an incomplete context,
+            # which generation leaves unwatermarked.
+            if self.skip_partial_contexts and any(token < 0 for token in context):
+                prefix.append(token_id)
+                continue
             # Reusing a context reuses one keyed random vector, so the resulting
             # token scores are not independent evidence.
             if not self.deduplicate_contexts or not _is_repeated_context(

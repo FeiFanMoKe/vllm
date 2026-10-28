@@ -51,10 +51,10 @@ edits because an insertion, deletion, or substitution changes more subsequent
 contexts. Values above 16 are allowed but emit a warning.
 
 `allow_target_only_watermarking` defaults to false and only has an effect when
-speculative decoding is enabled. It permits speculative decoding with a
-watermarking algorithm that does not support it natively, at the cost of
-weaker detectability. See
-[Speculative decoding](#speculative-decoding).
+speculative decoding is enabled. It permits speculative decoding with the
+`gumbel` algorithm, which does not support it natively, at the cost of weaker
+detectability. SynthID does not support speculative decoding even in this
+mode. See [Speculative decoding](#speculative-decoding).
 
 ## Architecture
 
@@ -101,12 +101,13 @@ standard rejection sampling, and an autoregressive model-based method (`dspark`,
 `eagle`, `eagle3`, or `mtp`). Parallel drafting is supported only by `dspark`.
 
 A watermarking algorithm without native speculative-decoding support is
-rejected before model loading. Set
+rejected before model loading. For the `gumbel` algorithm, set
 `"allow_target_only_watermarking": true` to allow it: accepted draft tokens are
 not watermarked, while target-side rejection recovery and bonus sampling remain
 watermarked. The watermark signal is diluted in proportion to the share of
 output tokens supplied by accepted drafts; rejected drafts do not dilute it
-because their recovery tokens are watermarked.
+because their recovery tokens are watermarked. SynthID does not support
+speculative decoding at all, including this target-only mode.
 
 For `dual_key_gumbel`, `alpha` has no effect under speculative decoding. The
 speculative protocol selects the key for each token instead.
@@ -199,45 +200,50 @@ vllm serve MODEL \
 ### SynthID-Text
 
 [SynthID-Text](https://www.nature.com/articles/s41586-024-08025-4) assigns each
-candidate token a binary g-value vote from each of `synthid_depth` independently
-keyed layers. vLLM implements the non-distortionary variant: the sampling
-distribution is updated layer by layer so that it equals the original
-distribution in expectation over the secret key. Each generated token carries
-evidence from all layers, which keeps the watermark detectable on short texts
-and after some tokens are edited, at a higher per-step compute cost than
-Gumbel-max.
+candidate token a binary g-value vote from each of `synthid_depth` layers. vLLM
+derives every layer bit from one keyed pseudorandom evaluation per
+(context, token), as in the reference implementation, and applies the
+non-distortionary update layer by layer so that the sampling distribution
+equals the original one in expectation over the secret key. Each generated
+token carries evidence from all layers, which keeps the watermark detectable
+on short texts and after some tokens are edited, at a higher per-step compute
+cost than Gumbel-max.
 
 ```bash
 vllm serve MODEL \
   --watermark-config '{"algorithm":"synthid","key":42}'
 ```
 
-`synthid_depth` defaults to 30. Larger values strengthen the watermark and
-improve robustness to edits at roughly linear per-step cost; smaller values
-reduce overhead. `context_width` defaults to 4 and must match between
-generation and detection.
+`synthid_depth` defaults to 30 and must not exceed 128, the number of bits one
+PRF evaluation provides. Larger values strengthen the watermark and improve
+robustness to edits at roughly linear cost; smaller values reduce overhead.
+`context_width` defaults to 4 and must match between generation and detection;
+the reference implementation's `ngram_len=5` corresponds to a four-token
+context plus the target token.
 
-`synthid_candidate_cap` bounds how many top-probability candidates each
-layer scores per step and defaults to 4096. The result is exact whenever
-the post top-k/top-p support fits under the cap (which always holds for
-`top_k` up to 4096); a larger support keeps its tail nearly neutral, so
-sampling still covers the full distribution at a signal dilution bounded
-by the tail mass. Set it to `null` to score the full vocabulary exactly at
-higher per-step cost.
+Only tokens with finite logits after top-k/top-p are watermarked, and the
+update is exact over that support, matching the reference implementation's
+candidate set. Per-step cost grows with the support size, so set `top_k` (for
+example 50, as in the reference examples) to bound it; without top-k/top-p the
+full vocabulary is processed on every step. There is no separate candidate cap.
+
+The first `context_width` generated tokens have an incomplete context and are
+not watermarked; detection skips them as well. Pass only the generated tokens
+to the detector, not the prompt, so that detection contexts match the contexts
+seen during generation.
 
 Like Gumbel-max, SynthID-Text requires stochastic sampling: greedy requests
-(`temperature=0`) bypass watermarking. There is no native
-speculative-decoding variant; use `allow_target_only_watermarking` as
-described in [Speculative decoding](#speculative-decoding), noting that
-accepted draft tokens dilute the signal.
+(`temperature=0`) and `top_k=1` requests bypass watermarking. SynthID does not
+support speculative decoding, including target-only watermarking; the engine
+rejects that combination.
 
-Detection uses the mean g-value over all layers, with a p-value from the
-binomial null distribution:
+Detection counts the g=1 votes over all scored tokens and layers and derives a
+p-value from the binomial null distribution:
 
 ```python
 from vllm.v1.watermarking import SynthIDWatermarkDetector
 
-result = SynthIDWatermarkDetector(key=42).detect(token_ids)
+result = SynthIDWatermarkDetector(key=42).detect(generated_token_ids)
 print(result.p_value, result.is_watermarked)
 ```
 

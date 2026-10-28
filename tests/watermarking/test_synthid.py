@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-
 import pytest
 import torch
 
@@ -19,26 +18,38 @@ CONTEXT_WIDTH = 4
 DEPTH = 30
 
 
-def _naive_expected_g_update(
+def _g_bits(
+    prf, contexts: torch.Tensor, tokens: torch.Tensor, depth: int
+) -> torch.Tensor:
+    words = prf.bits(contexts, tokens, (depth + 31) // 32)
+    return torch.stack(
+        [((words[layer // 32] >> (layer % 32)) & 1) for layer in range(depth)]
+    )
+
+
+def _reference_update(
     logits: torch.Tensor,
     contexts: torch.Tensor,
     watermarker: SynthIDWatermarker,
 ) -> torch.Tensor:
-    """Reference expected-g-value update, computed one layer at a time.
+    """Probability-domain reference, computed one layer at a time.
 
     Mirrors update_scores() in DeepMind's synthid-text repository; used to
-    cross-check the vectorized implementation.
+    cross-check the vectorized log-domain implementation.
     """
-    vocabulary = torch.arange(logits.shape[-1], device=logits.device)
     probs = torch.softmax(logits.to(torch.float32), dim=-1)
-    for layer_prf in watermarker.layer_prfs:
-        g = (layer_prf.uniform(contexts, vocabulary) >= 0.5).to(probs.dtype)
+    vocabulary = torch.arange(logits.shape[-1], device=logits.device)
+    bits = _g_bits(watermarker.prf, contexts, vocabulary, watermarker.depth)
+    for layer in range(watermarker.depth):
+        g = bits[layer].to(probs.dtype)
         for row in range(probs.shape[0]):
             g_mass = (g[row] * probs[row]).sum()
             probs[row] = probs[row] * (1.0 + g[row] - g_mass)
     log_probs = torch.log(probs)
     return torch.where(
-        torch.isfinite(log_probs), log_probs, torch.full_like(log_probs, -1e12)
+        torch.isfinite(logits),
+        log_probs,
+        torch.full_like(log_probs, float("-inf")),
     )
 
 
@@ -46,80 +57,86 @@ def _random_logits(batch: int, vocab: int, seed: int) -> torch.Tensor:
     return torch.randn(batch, vocab, generator=torch.Generator().manual_seed(seed))
 
 
+def _random_contexts(batch: int, seed: int) -> torch.Tensor:
+    return torch.randint(
+        0,
+        VOCAB_SIZE,
+        (batch, CONTEXT_WIDTH),
+        generator=torch.Generator().manual_seed(seed),
+    )
+
+
+def _assert_same_distribution(actual: torch.Tensor, expected: torch.Tensor) -> None:
+    assert torch.equal(torch.isneginf(actual), torch.isneginf(expected))
+    assert torch.allclose(
+        torch.softmax(actual, dim=-1),
+        torch.softmax(expected, dim=-1),
+        atol=1e-7,
+        rtol=1e-4,
+    )
+
+
 def test_transform_matches_reference_implementation():
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
     logits = _random_logits(3, VOCAB_SIZE, seed=0)
-    contexts = torch.randint(0, VOCAB_SIZE, (3, CONTEXT_WIDTH))
-    expected = _naive_expected_g_update(logits, contexts, watermarker)
+    contexts = _random_contexts(3, seed=0)
+    expected = _reference_update(logits, contexts, watermarker)
     actual = watermarker._transform_logits(logits, contexts)
-    assert torch.allclose(actual, expected, atol=1e-5)
+    _assert_same_distribution(actual, expected)
 
 
 def test_transform_preserves_truncated_support():
-    """Tokens excluded by top-k/top-p must stay excluded after watermarking."""
+    """Tokens excluded by top-k/top-p must stay at -inf after watermarking."""
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
     logits = _random_logits(2, VOCAB_SIZE, seed=1)
     logits[:, VOCAB_SIZE // 2 :] = float("-inf")
-    contexts = torch.randint(0, VOCAB_SIZE, (2, CONTEXT_WIDTH))
+    contexts = _random_contexts(2, seed=1)
     transformed = watermarker._transform_logits(logits, contexts)
-    assert (transformed[:, VOCAB_SIZE // 2 :] <= -1e11).all()
-    assert (transformed[:, : VOCAB_SIZE // 2] > -1e11).any()
+    assert torch.isneginf(transformed[:, VOCAB_SIZE // 2 :]).all()
+    assert torch.isfinite(transformed[:, : VOCAB_SIZE // 2]).all()
 
 
-def test_capped_path_exact_when_support_fits_cap():
-    """With support <= cap < vocab, the capped path must match the exact
-    full-vocabulary computation everywhere."""
-    capped = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH, candidate_cap=300)
-    exact = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH, candidate_cap=None)
+def test_transform_exact_with_per_row_support():
+    """Rows with fewer finite tokens than the batch maximum stay exact."""
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(3, VOCAB_SIZE, seed=2)
+    logits[0, 400:] = float("-inf")
+    logits[1, 250:] = float("-inf")
+    logits[2, 10:] = float("-inf")
+    contexts = _random_contexts(3, seed=2)
+    expected = _reference_update(logits, contexts, watermarker)
+    actual = watermarker._transform_logits(logits, contexts)
+    _assert_same_distribution(actual, expected)
+
+
+def test_transform_all_masked_row_has_no_nan():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
     logits = _random_logits(2, VOCAB_SIZE, seed=3)
-    logits[:, 256:] = float("-inf")
-    contexts = torch.randint(0, VOCAB_SIZE, (2, CONTEXT_WIDTH))
-    compact = capped._transform_logits(logits, contexts)
-    reference = exact._transform_logits(logits, contexts)
-    assert torch.allclose(compact, reference, atol=1e-5)
+    logits[0] = float("-inf")
+    contexts = _random_contexts(2, seed=3)
+    transformed = watermarker._transform_logits(logits, contexts)
+    assert not torch.isnan(transformed).any()
+    assert torch.isneginf(transformed[0]).all()
+    assert torch.isfinite(transformed[1]).all()
 
 
-def test_capped_path_preserves_tail_shape_and_normalization():
-    """With support > cap, tail tokens keep their relative probabilities
-    (they are only neutralized, not truncated) and the result stays a
-    proper distribution."""
-    capped = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH, candidate_cap=64)
-    logits = _random_logits(2, VOCAB_SIZE, seed=4)
-    contexts = torch.randint(0, VOCAB_SIZE, (2, CONTEXT_WIDTH))
-    transformed = capped._transform_logits(logits, contexts)
-    out_probs = torch.softmax(transformed, dim=-1)
-    assert torch.allclose(out_probs.sum(dim=-1), torch.ones(2), atol=1e-5)
-    base_probs = torch.softmax(logits, dim=-1)
-    top_indices = logits.topk(64, dim=-1).indices
-    tail_mask = torch.ones_like(logits, dtype=torch.bool)
-    tail_mask.scatter_(-1, top_indices, False)
-    ratios = out_probs[tail_mask] / base_probs[tail_mask]
-    per_row = ratios.split(VOCAB_SIZE - 64)
-    for row_ratios in per_row:
-        assert row_ratios.max().item() / row_ratios.min().item() < 1.001
-
-
-def test_g_values_deterministic_and_balanced_across_layers():
+def test_g_bits_deterministic_and_balanced_across_layers():
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
-    contexts = torch.randint(0, VOCAB_SIZE, (64, CONTEXT_WIDTH))
+    contexts = _random_contexts(64, seed=4)
     vocabulary = torch.arange(VOCAB_SIZE)
-    for layer_prf in watermarker.layer_prfs[:5]:
-        uniforms = layer_prf.uniform(contexts, vocabulary)
-        assert torch.equal(uniforms, layer_prf.uniform(contexts, vocabulary))
-        fraction_ones = (uniforms >= 0.5).double().mean().item()
-        assert abs(fraction_ones - 0.5) < 0.02
+    bits = _g_bits(watermarker.prf, contexts, vocabulary, watermarker.depth)
+    assert torch.equal(
+        bits, _g_bits(watermarker.prf, contexts, vocabulary, watermarker.depth)
+    )
+    fractions = bits.to(torch.float64).mean(dim=(1, 2))
+    assert (fractions - 0.5).abs().max().item() < 0.02
 
 
-def test_layer_keys_produce_independent_g_values():
+def test_g_bits_across_layers_are_uncorrelated():
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
-    contexts = torch.randint(0, VOCAB_SIZE, (256, CONTEXT_WIDTH))
+    contexts = _random_contexts(256, seed=5)
     vocabulary = torch.arange(VOCAB_SIZE)
-    g = torch.stack(
-        [
-            layer_prf.uniform(contexts, vocabulary) >= 0.5
-            for layer_prf in watermarker.layer_prfs
-        ]
-    ).double()
+    g = _g_bits(watermarker.prf, contexts, vocabulary, watermarker.depth).double()
     means = g.mean(dim=(1, 2), keepdim=True)
     centered = g - means
     covariance = torch.einsum("lbc,kbc->lk", centered, centered)
@@ -131,8 +148,7 @@ def test_layer_keys_produce_independent_g_values():
 
 
 def test_watermarked_distribution_unbiased_in_expectation():
-    """Non-distortion: averaging the watermarked distribution over independent
-    g-value draws (fresh contexts) must recover the original distribution.
+    """Non-distortion: averaging over independent keys recovers the original.
 
     Tested with a single layer: the per-layer update is where an
     implementation error would live, and composition across independent
@@ -194,11 +210,41 @@ def test_wrong_key_does_not_detect():
     assert not detector.detect(token_ids).is_watermarked
 
 
+def test_detector_skips_partial_contexts():
+    detector = SynthIDWatermarkDetector(KEY, CONTEXT_WIDTH, DEPTH)
+    result = detector.detect(list(range(10)))
+    assert result.num_scored_tokens == 10 - CONTEXT_WIDTH
+    assert detector.detect([1, 2, 3]).num_scored_tokens == 0
+
+
 def test_detector_handles_empty_input():
     detector = SynthIDWatermarkDetector(KEY, CONTEXT_WIDTH, DEPTH)
     result = detector.detect([])
     assert result.num_scored_tokens == 0
     assert not result.is_watermarked
+
+
+def test_sample_skips_rows_with_partial_contexts():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(2, 128, seed=8)
+
+    sampler_calls = 0
+
+    def argmax_sampler(logits: torch.Tensor) -> torch.Tensor:
+        nonlocal sampler_calls
+        sampler_calls += 1
+        return logits.argmax(dim=-1)
+
+    contexts = torch.tensor([[-1, -1, -1, -1], [0, 1, 2, 3]])
+    sampled = watermarker.sample(logits, contexts, argmax_sampler)
+    assert sampler_calls == 1
+    assert sampled.token_ids[0] == logits[0].argmax()
+    assert torch.equal(sampled.logits[0], logits[0])
+
+    skipped = watermarker.sample(
+        logits, contexts, argmax_sampler, skip_mask=torch.tensor([False, True])
+    )
+    assert torch.equal(skipped.logits[1], logits[1])
 
 
 def test_invalid_parameters_rejected():
@@ -207,7 +253,11 @@ def test_invalid_parameters_rejected():
     with pytest.raises(ValueError):
         SynthIDWatermarker(KEY, depth=0)
     with pytest.raises(ValueError):
+        SynthIDWatermarker(KEY, depth=129)
+    with pytest.raises(ValueError):
         SynthIDWatermarkDetector(KEY, depth=0)
+    with pytest.raises(ValueError):
+        SynthIDWatermarkDetector(KEY, depth=129)
 
 
 def test_binomial_survival_matches_closed_form():
@@ -215,6 +265,8 @@ def test_binomial_survival_matches_closed_form():
     assert _binomial_survival(4, 4) == pytest.approx(1 / 16)
     assert _binomial_survival(3, 4) == pytest.approx(5 / 16)
     assert _binomial_survival(0, 4) == 1.0
+    assert _binomial_survival(5, 4) == 0.0
+    assert _binomial_survival(6, 4) == 0.0
 
 
 def test_factory_creates_synthid_watermarker():
@@ -222,4 +274,3 @@ def test_factory_creates_synthid_watermarker():
     watermarker = create_watermarker(config)
     assert isinstance(watermarker, SynthIDWatermarker)
     assert watermarker.depth == 8
-    assert len(watermarker.layer_prfs) == 8

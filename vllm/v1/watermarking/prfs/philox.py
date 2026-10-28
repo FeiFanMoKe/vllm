@@ -137,51 +137,40 @@ def _philox_uniform(
     )
 
 
-_compiled_philox_uint32 = torch.compile(_philox_uint32, fullgraph=True, dynamic=True)
-_compiled_philox_uniform = torch.compile(_philox_uniform, fullgraph=True, dynamic=True)
-
-
-def _philox_uint32_multikey(
-    keys_0: torch.Tensor,
-    keys_1: torch.Tensor,
+def _philox_bits(
+    key_0_value: int,
+    key_1_value: int,
     contexts: torch.Tensor,
     token_ids: torch.Tensor,
-) -> torch.Tensor:
-    """Batched-key Philox: many keys share one call.
+    num_words: int,
+) -> tuple[torch.Tensor, ...]:
+    """Packed g-value bits (uint32 words held in int64).
 
-    Args:
-        keys_0, keys_1: int64 tensors of shape (L,), the low/high key words.
-        contexts: (B, W) context windows.
-        token_ids: (B, C) candidate tokens.
-
-    Returns:
-        (L, B, C) uint32 outputs (held in int64), identical to stacking
-        ``_philox_uint32(keys_0[i], keys_1[i], contexts, token_ids)`` over i.
+    Bit ``i`` of the concatenated words is the ``i``-th layer's g-value, so
+    one evaluation serves up to 128 layers.
     """
-    num_keys = keys_0.shape[0]
     contexts = contexts.to(torch.int64) & _UINT32_MASK
-    batch, width = contexts.shape
-    prefix_shape = (num_keys, batch)
+    prefix_shape = contexts.shape[:-1]
     device = contexts.device
-    key_0 = keys_0.to(device=device, dtype=torch.int64).unsqueeze(1).expand(
-        prefix_shape
-    )
-    key_1 = keys_1.to(device=device, dtype=torch.int64).unsqueeze(1).expand(
-        prefix_shape
-    )
-    contexts = contexts.unsqueeze(0).expand(num_keys, batch, width)
+    key_0 = torch.full(prefix_shape, key_0_value, dtype=torch.int64, device=device)
+    key_1 = torch.full(prefix_shape, key_1_value, dtype=torch.int64, device=device)
     state = (
         torch.full(prefix_shape, _CONTEXT_DOMAIN, dtype=torch.int64, device=device),
-        torch.full(prefix_shape, width, dtype=torch.int64, device=device),
+        torch.full(
+            prefix_shape,
+            contexts.shape[-1],
+            dtype=torch.int64,
+            device=device,
+        ),
         torch.zeros(prefix_shape, dtype=torch.int64, device=device),
         torch.zeros(prefix_shape, dtype=torch.int64, device=device),
     )
 
-    for offset in range(0, width, 4):
+    for offset in range(0, contexts.shape[-1], 4):
         block = []
         for index in range(4):
             position = offset + index
-            if position < width:
+            if position < contexts.shape[-1]:
                 block.append(contexts[..., position])
             else:
                 block.append(
@@ -197,20 +186,17 @@ def _philox_uint32_multikey(
         )
         state = _philox4x32_10(counter, ((key_0 ^ offset) & _UINT32_MASK, key_1))
 
-    num_candidates = token_ids.shape[-1]
-    output_shape = (num_keys, batch, num_candidates)
-    tokens = torch.broadcast_to(
-        token_ids.to(device=device).unsqueeze(0), output_shape
-    )
+    output_shape = torch.broadcast_shapes(prefix_shape + (1,), token_ids.shape)
+    tokens = torch.broadcast_to(token_ids.to(device=device), output_shape)
     state = tuple(
         torch.broadcast_to(word.unsqueeze(-1), output_shape) for word in state
     )
     candidate_key_0 = torch.broadcast_to(key_0.unsqueeze(-1), output_shape)
     candidate_key_1 = torch.broadcast_to(key_1.unsqueeze(-1), output_shape)
     token_words = tokens.to(torch.int64) & _UINT32_MASK
-    outputs = _philox4x32_10(
+    words = _philox4x32_10(
         (
-            token_words >> 2,
+            token_words,
             state[0],
             state[1],
             state[2],
@@ -220,28 +206,12 @@ def _philox_uint32_multikey(
             (candidate_key_1 ^ _TOKEN_DOMAIN) & _UINT32_MASK,
         ),
     )
-    word_index = token_words & 3
-    output = outputs[0]
-    for index in range(1, 4):
-        output = torch.where(word_index == index, outputs[index], output)
-    return output
+    return words[:num_words]
 
 
-_compiled_philox_uint32_multikey = torch.compile(
-    _philox_uint32_multikey, fullgraph=True, dynamic=True
-)
-
-
-def philox_uint32_multikey(
-    keys_0: torch.Tensor,
-    keys_1: torch.Tensor,
-    contexts: torch.Tensor,
-    token_ids: torch.Tensor,
-) -> torch.Tensor:
-    """Multi-key Philox over (L,) key tensors; compiled on CUDA, eager on CPU."""
-    if contexts.device.type == "cuda":
-        return _compiled_philox_uint32_multikey(keys_0, keys_1, contexts, token_ids)
-    return _philox_uint32_multikey(keys_0, keys_1, contexts, token_ids)
+_compiled_philox_uint32 = torch.compile(_philox_uint32, fullgraph=True, dynamic=True)
+_compiled_philox_uniform = torch.compile(_philox_uniform, fullgraph=True, dynamic=True)
+_compiled_philox_bits = torch.compile(_philox_bits, fullgraph=True, dynamic=True)
 
 
 class PhiloxPRF(WatermarkPRF):
@@ -266,3 +236,17 @@ class PhiloxPRF(WatermarkPRF):
         if contexts.device.type == "cuda":
             return _compiled_philox_uniform(*key_words, contexts, token_ids)
         return _philox_uniform(*key_words, contexts, token_ids)
+
+    def bits(
+        self,
+        contexts: torch.Tensor,
+        token_ids: torch.Tensor,
+        num_words: int = 4,
+    ) -> tuple[torch.Tensor, ...]:
+        """Packed g-value bits; see :meth:`WatermarkPRF.bits`."""
+        if not 1 <= num_words <= 4:
+            raise ValueError("num_words must be between 1 and 4")
+        key_words = self.key & _UINT32_MASK, self.key >> 32
+        if contexts.device.type == "cuda":
+            return _compiled_philox_bits(*key_words, contexts, token_ids, num_words)
+        return _philox_bits(*key_words, contexts, token_ids, num_words)

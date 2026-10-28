@@ -1355,6 +1355,12 @@ class VllmConfig:
                     "Watermarking supports only autoregressive model-based "
                     "speculative decoding."
                 )
+            if watermark_config.algorithm == "synthid":
+                raise ValueError(
+                    "SynthID watermarking does not support speculative "
+                    "decoding, including target-only watermarking. Disable "
+                    "speculative decoding or use the 'gumbel' algorithm."
+                )
             if (
                 not watermark_config.allow_target_only_watermarking
                 and not watermark_config.supports_speculative_decoding
