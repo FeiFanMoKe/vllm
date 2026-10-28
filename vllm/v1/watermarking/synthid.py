@@ -5,10 +5,14 @@
 
 Implements the non-distortionary variant of SynthID-Text
 (https://www.nature.com/articles/s41586-024-08025-4): each of `depth`
-independently keyed layers casts a binary g-value vote on every candidate
-token, and the sampling distribution is updated per layer as
-``probs *= (1 + g - E[g])`` so the watermarked distribution matches the
-original one in expectation over the secret key.
+layers casts a binary g-value vote on every candidate token, and the
+sampling distribution is updated per layer as ``probs *= (1 + g - E[g])``
+so the watermarked distribution matches the original one in expectation
+over the secret key.
+
+As in the reference implementation, all layer bits come from one keyed
+pseudorandom evaluation per (context, token), and the update covers exactly
+the tokens with finite logits.
 """
 
 import math
@@ -18,55 +22,23 @@ import torch
 from vllm.config.watermarking import WatermarkPRFName, derive_watermark_key
 from vllm.v1.watermarking.detector import WatermarkDetector
 from vllm.v1.watermarking.prfs import WatermarkPRF, create_prf
-from vllm.v1.watermarking.prfs.philox import PhiloxPRF, philox_uint32_multikey
 from vllm.v1.watermarking.watermarker import (
     RandomSampler,
     Watermarker,
     WatermarkSample,
 )
 
-_NEG_INF_SUBSTITUTE = -1e12
 _EXACT_BINOMIAL_MAX_N = 100_000
-_UINT32_SIGN_BIT = 2**31
-
-
-def _g_values(
-    prf: WatermarkPRF, contexts: torch.Tensor, tokens: torch.Tensor
-) -> torch.Tensor:
-    """Binary g-value votes as a bool tensor.
-
-    For Philox, ``uniform >= 0.5`` is exactly the sign bit of the raw uint32
-    output (mantissa >= 2**23 after the >> 8 in uint32_to_uniform), so the
-    fp64/fp32 uniform intermediates are skipped entirely.
-    """
-    if isinstance(prf, PhiloxPRF):
-        return prf.uint32(contexts, tokens) >= _UINT32_SIGN_BIT
-    return prf.uniform(contexts, tokens) >= 0.5
-
-
-def _layer_prfs(key: int, depth: int, prf: WatermarkPRFName) -> list[WatermarkPRF]:
-    return [
-        create_prf(prf, derive_watermark_key(key, f"synthid_layer_{i}".encode()))
-        for i in range(depth)
-    ]
-
-
-def _layer_multikey(
-    layer_prfs: list[WatermarkPRF],
-) -> tuple[torch.Tensor, torch.Tensor] | None:
-    """Stacked (keys_0, keys_1) for batched multikey PRF, or None if any
-    layer is not a PhiloxPRF."""
-    if all(isinstance(p, PhiloxPRF) for p in layer_prfs):
-        keys_0 = torch.tensor(
-            [p.key & (2**32 - 1) for p in layer_prfs], dtype=torch.int64
-        )
-        keys_1 = torch.tensor([p.key >> 32 for p in layer_prfs], dtype=torch.int64)
-        return keys_0, keys_1
-    return None
+_MAX_DEPTH = 128
 
 
 class SynthIDWatermarker(Watermarker):
-    """Non-distortionary SynthID-Text tournament watermarker."""
+    """Non-distortionary SynthID-Text tournament watermarker.
+
+    Contexts with padding (negative token ids) belong to the first
+    `context_width` generated tokens, whose context is incomplete. They are
+    sampled without the watermark, as in the reference implementation.
+    """
 
     def __init__(
         self,
@@ -74,42 +46,15 @@ class SynthIDWatermarker(Watermarker):
         context_width: int = 4,
         depth: int = 30,
         prf: WatermarkPRFName = "philox",
-        candidate_cap: int | None = 4096,
     ) -> None:
         if context_width < 1:
             raise ValueError("context_width must be positive")
-        if depth < 1:
-            raise ValueError("depth must be positive")
-        self.layer_prfs = _layer_prfs(key, depth, prf)
+        if not 1 <= depth <= _MAX_DEPTH:
+            raise ValueError(f"depth must be between 1 and {_MAX_DEPTH}")
+        self.prf = create_prf(prf, derive_watermark_key(key, b"synthid"))
         self.depth = depth
         self._context_width = context_width
-        self.candidate_cap = candidate_cap
-        self._multikey: tuple[torch.Tensor, torch.Tensor] | None = _layer_multikey(
-            self.layer_prfs
-        )
-        self._multikey_device: tuple[torch.Tensor, torch.Tensor] | None = None
-
-    def _all_layer_g_values(
-        self, contexts: torch.Tensor, tokens: torch.Tensor
-    ) -> torch.Tensor:
-        """Binary g-values for all layers stacked as (depth, batch, candidates).
-
-        Every layer's (key, context, token) inputs are identical to the
-        per-layer loop, so the stacked values are bit-identical; only the
-        PRF evaluation is batched across layers.
-        """
-        if self._multikey is not None:
-            keys = self._multikey_device
-            if keys is None or keys[0].device != contexts.device:
-                keys = tuple(
-                    k.to(contexts.device) for k in self._multikey
-                )
-                self._multikey_device = keys
-            return (
-                philox_uint32_multikey(keys[0], keys[1], contexts, tokens)
-                >= _UINT32_SIGN_BIT
-            )
-        return torch.stack([_g_values(p, contexts, tokens) for p in self.layer_prfs])
+        self._num_words = (depth + 31) // 32
 
     @property
     def context_width(self) -> int:
@@ -122,75 +67,53 @@ class SynthIDWatermarker(Watermarker):
     ) -> torch.Tensor:
         """Apply the per-layer expected-g-value update to the logits.
 
-        With a candidate cap, layers score only the top-cap candidates; the
-        remaining tail is treated as neutral (g = E[g] = 0.5), so its
-        relative probabilities are preserved and sampling still covers the
-        full support. The result is exact whenever the post top-k/top-p
-        support fits under the cap; a larger support dilutes the signal in
-        proportion to the tail mass. The capped path works in the log domain:
-        the multiplicative update ``p *= (1 + g - E[g])`` becomes the additive
-        ``logp += log1p(g - E[g])``, so the full vocabulary is touched only
-        for one logsumexp reduction and one write-back pass.
+        Only tokens with finite logits are candidates: the update is exact
+        over the post top-k/top-p support, and every other token stays at
+        ``-inf``. One PRF evaluation serves all layers, so the support size
+        controls the per-step cost.
         """
-        if self.candidate_cap is None or self.candidate_cap >= logits.shape[-1]:
-            logp = logits.to(torch.float32).log_softmax(dim=-1)
-            vocabulary = torch.arange(logits.shape[-1], device=logits.device)
-            logp = self._update_log_probs(logp, contexts, vocabulary)
-            return torch.where(
-                torch.isfinite(logp),
-                logp,
-                torch.full_like(logp, _NEG_INF_SUBSTITUTE),
-            )
-        return self._transform_logits_capped(logits, contexts)
+        logits = logits.to(torch.float32)
+        finite_counts = torch.isfinite(logits).sum(dim=-1)
+        num_candidates = int(finite_counts.max())
+        if num_candidates == 0:
+            return logits
 
-    def _transform_logits_capped(
+        if num_candidates == logits.shape[-1]:
+            candidates = logits
+            indices = None
+            tokens = torch.arange(logits.shape[-1], device=logits.device)
+        else:
+            candidates, indices = logits.topk(num_candidates, dim=-1)
+            tokens = indices
+
+        logp = candidates.log_softmax(dim=-1)
+        words = self.prf.bits(contexts, tokens, self._num_words)
+        for layer in range(self.depth):
+            g = ((words[layer // 32] >> (layer % 32)) & 1).to(logp.dtype)
+            g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
+            logp = logp + torch.log1p(g - g_mass)
+        logp = torch.where(
+            torch.isfinite(logp),
+            logp,
+            torch.full_like(logp, float("-inf")),
+        )
+
+        if indices is None:
+            return logp
+        out = torch.full_like(logits, float("-inf"))
+        return out.scatter(-1, indices, logp)
+
+    def _mixed_logits(
         self,
         logits: torch.Tensor,
         contexts: torch.Tensor,
+        skip_mask: torch.Tensor | None,
     ) -> torch.Tensor:
-        logits = logits.to(torch.float32)
-        lse = logits.logsumexp(dim=-1, keepdim=True)
-        top_logits, top_indices = logits.topk(self.candidate_cap, dim=-1)
-        logp_top = top_logits - lse
-        top_lse = top_logits.logsumexp(dim=-1)
-        tail_mass = 1 - torch.exp(top_lse - lse.squeeze(-1))
-        tail_logscale = torch.zeros_like(tail_mass)
-        g_all = self._all_layer_g_values(contexts, top_indices)
-        for g in g_all.unbind(0):
-            g_mass = (g * logp_top.exp()).sum(dim=-1) + 0.5 * tail_mass
-            logp_top = logp_top + torch.log1p(
-                g.to(logp_top.dtype) - g_mass.unsqueeze(-1)
-            )
-            tail_logscale = tail_logscale + torch.log(1.5 - g_mass)
-            tail_mass = tail_mass * (1.5 - g_mass)
-        logp_top = torch.where(
-            torch.isfinite(logp_top),
-            logp_top,
-            torch.full_like(logp_top, _NEG_INF_SUBSTITUTE),
-        )
-        out = (logits - lse + tail_logscale.unsqueeze(-1)).clamp_min(
-            _NEG_INF_SUBSTITUTE
-        )
-        out = out.scatter(-1, top_indices, logp_top)
-        return out
-
-    def _update_log_probs(
-        self,
-        logp: torch.Tensor,
-        contexts: torch.Tensor,
-        tokens: torch.Tensor,
-    ) -> torch.Tensor:
-        """Log-domain per-layer update over the full vocabulary.
-
-        Working in log space avoids the fp32 underflow to zero (and the
-        resulting -1e12 clamping and normalization drift) that the
-        probability-domain multiplicative update hits for tokens the
-        watermark pushes below ~1e-38.
-        """
-        for g in self._all_layer_g_values(contexts, tokens).unbind(0):
-            g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
-            logp = logp + torch.log1p(g.to(logp.dtype) - g_mass)
-        return logp
+        transformed = self._transform_logits(logits, contexts)
+        skip = (contexts < 0).any(dim=-1)
+        if skip_mask is not None:
+            skip = skip | skip_mask
+        return torch.where(skip.unsqueeze(-1), logits, transformed)
 
     def sample(
         self,
@@ -200,20 +123,16 @@ class SynthIDWatermarker(Watermarker):
         skip_mask: torch.Tensor | None = None,
     ) -> WatermarkSample:
         if random_sampler is None:
-            return super().sample(logits, contexts, random_sampler, skip_mask)
-        transformed = self._transform_logits(logits, contexts)
-        token_ids = random_sampler(transformed)
-        if skip_mask is not None:
-            token_ids = torch.where(skip_mask, random_sampler(logits), token_ids)
-            transformed = torch.where(skip_mask.unsqueeze(-1), logits, transformed)
-        return WatermarkSample(token_ids, transformed)
+            return self._sample_watermarked(logits, contexts)
+        transformed = self._mixed_logits(logits, contexts, skip_mask)
+        return WatermarkSample(random_sampler(transformed), transformed)
 
     def _sample_watermarked(
         self,
         logits: torch.Tensor,
         contexts: torch.Tensor,
     ) -> WatermarkSample:
-        transformed = self._transform_logits(logits, contexts)
+        transformed = self._mixed_logits(logits, contexts, None)
         token_ids = torch.multinomial(
             torch.softmax(transformed, dim=-1), num_samples=1
         ).squeeze(-1)
@@ -221,12 +140,16 @@ class SynthIDWatermarker(Watermarker):
 
 
 class SynthIDWatermarkDetector(WatermarkDetector):
-    """Mean g-value detector with an analytic binomial p-value.
+    """G-value count detector with an analytic binomial p-value.
 
     Under the null hypothesis each scored token receives independent fair
     coin flips across all layers, so the total g-value count follows a
-    Binomial(num_scored_tokens * depth, 0.5) distribution.
+    Binomial(num_scored_tokens * depth, 0.5) distribution. The first
+    `context_width` tokens are not scored because their context is
+    incomplete; pass only the generated tokens, not the prompt.
     """
+
+    skip_partial_contexts = True
 
     def __init__(
         self,
@@ -237,26 +160,22 @@ class SynthIDWatermarkDetector(WatermarkDetector):
         prf: WatermarkPRFName = "philox",
         deduplicate_contexts: bool = True,
     ) -> None:
-        if depth < 1:
-            raise ValueError("depth must be positive")
+        if not 1 <= depth <= _MAX_DEPTH:
+            raise ValueError(f"depth must be between 1 and {_MAX_DEPTH}")
         super().__init__(context_width, p_value_threshold, deduplicate_contexts)
-        self.layer_prfs = _layer_prfs(key, depth, prf)
+        self.prf: WatermarkPRF = create_prf(prf, derive_watermark_key(key, b"synthid"))
         self.depth = depth
-        self._multikey = _layer_multikey(self.layer_prfs)
+        self._num_words = (depth + 31) // 32
 
     def _score_tokens(
         self, contexts: torch.Tensor, targets: torch.Tensor
     ) -> torch.Tensor:
-        targets = targets.unsqueeze(-1)
-        if self._multikey is not None:
-            keys_0, keys_1 = self._multikey
-            g = philox_uint32_multikey(keys_0, keys_1, contexts, targets)
-            return (g >= _UINT32_SIGN_BIT).squeeze(-1).to(torch.float64).sum(dim=0)
-        g_values = torch.stack(
-            [_g_values(prf, contexts, targets).squeeze(-1) for prf in self.layer_prfs],
-            dim=-1,
-        )
-        return g_values.to(torch.float64).sum(dim=-1)
+        words = self.prf.bits(contexts, targets.unsqueeze(-1), self._num_words)
+        score = torch.zeros(contexts.shape[0], dtype=torch.float64)
+        for layer in range(self.depth):
+            bits = ((words[layer // 32] >> (layer % 32)) & 1).squeeze(-1)
+            score += bits.to(torch.float64)
+        return score
 
     def _aggregate_scores(self, token_scores: torch.Tensor) -> float:
         return token_scores.sum().item()
@@ -274,6 +193,8 @@ def _binomial_survival(k: int, n: int) -> float:
     """Return P(X >= k) for X ~ Binomial(n, 0.5), computed in log space."""
     if k <= 0:
         return 1.0
+    if k > n:
+        return 0.0
     log_2_pow_n = n * math.log(2)
 
     def log_pmf(i: int) -> float:

@@ -45,6 +45,12 @@ class GPUWatermarkSampler(Sampler):
                 "(temperature=0) cannot be watermarked. This request will use "
                 "ordinary greedy sampling."
             )
+        if sampling_params.watermarking and sampling_params.top_k == 1:
+            logger.warning_once(
+                "Watermarking is enabled, but top_k=1 leaves a single "
+                "candidate token, so the watermark update is a no-op. This "
+                "request will not carry a watermark."
+            )
 
     def apply_staged_writes(self) -> None:
         super().apply_staged_writes()
