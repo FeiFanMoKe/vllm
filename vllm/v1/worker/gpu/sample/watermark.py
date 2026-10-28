@@ -800,3 +800,85 @@ def philox_gumbel_sample(
     )
     max_block_index = local_max.argmax(dim=-1, keepdim=True)
     return local_argmax.gather(dim=-1, index=max_block_index).view(-1)
+
+
+@triton.jit
+def _synthid_log1p(x):
+    # Triton has no log1p; use a series for small |x| and log(1 + x) otherwise.
+    small = tl.abs(x) < 1e-3
+    series = x * (1.0 - x * (0.5 - x * (1.0 / 3.0)))
+    return tl.where(small, series, tl.log(1.0 + x))
+
+
+@triton.jit
+def _synthid_update_kernel(
+    logp_ptr,
+    words_ptr,
+    out_ptr,
+    num_candidates,
+    stride_row,
+    DEPTH: tl.constexpr,
+    BLOCK_C: tl.constexpr,
+):
+    """Apply the SynthID expected-g update to one row's candidates.
+
+    ``words`` holds one int64 bit-word per candidate; layer ``i`` uses bit
+    ``i % 32``. DEPTH must not exceed 32.
+    """
+    row = tl.program_id(0)
+    offs = tl.arange(0, BLOCK_C)
+    mask = offs < num_candidates
+
+    logp = tl.load(
+        logp_ptr + row * stride_row + offs,
+        mask=mask,
+        other=float("-inf"),
+    )
+    word = tl.load(words_ptr + row * stride_row + offs, mask=mask, other=0)
+
+    for layer in tl.static_range(DEPTH):
+        g = ((word >> (layer % 32)) & 1).to(tl.float32)
+        probs = tl.where(mask, tl.exp(logp), 0.0)
+        g_mass = tl.sum(probs * g, axis=0)
+        logp = logp + _synthid_log1p(g - g_mass)
+
+    tl.store(out_ptr + row * stride_row + offs, logp, mask=mask)
+
+
+def synthid_update(
+    logp: torch.Tensor,
+    words: torch.Tensor,
+    depth: int,
+) -> torch.Tensor:
+    """Fused 30-layer SynthID update over candidate log-probs.
+
+    Args:
+        logp: (batch, candidates) float32 log-probabilities.
+        words: (batch, candidates) int64 packed g-value bits.
+        depth: number of layers, at most 32.
+
+    Returns:
+        Updated (batch, candidates) log-probabilities.
+
+    """
+    if not HAS_TRITON:
+        raise RuntimeError("SynthID fused update requires Triton")
+    if depth > 32:
+        raise ValueError("fused SynthID update supports depth <= 32")
+    logp = logp.contiguous()
+    words = words.contiguous()
+    batch, candidates = logp.shape
+    out = torch.empty_like(logp)
+    block_c = triton.next_power_of_2(candidates)
+    num_warps = 1 if block_c <= 128 else (4 if block_c <= 1024 else 8)
+    _synthid_update_kernel[(batch,)](
+        logp,
+        words,
+        out,
+        candidates,
+        logp.stride(0),
+        DEPTH=depth,
+        BLOCK_C=block_c,
+        num_warps=num_warps,
+    )
+    return out
