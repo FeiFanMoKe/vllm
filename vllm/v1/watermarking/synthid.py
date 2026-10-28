@@ -30,6 +30,7 @@ from vllm.v1.watermarking.watermarker import (
 
 _EXACT_BINOMIAL_MAX_N = 100_000
 _MAX_DEPTH = 128
+_FUSED_UPDATE_MAX_CANDIDATES = 4096
 
 
 class SynthIDWatermarker(Watermarker):
@@ -88,10 +89,7 @@ class SynthIDWatermarker(Watermarker):
 
         logp = candidates.log_softmax(dim=-1)
         words = self.prf.bits(contexts, tokens, self._num_words)
-        for layer in range(self.depth):
-            g = ((words[layer // 32] >> (layer % 32)) & 1).to(logp.dtype)
-            g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
-            logp = logp + torch.log1p(g - g_mass)
+        logp = self._apply_expected_g_update(logp, words)
         logp = torch.where(
             torch.isfinite(logp),
             logp,
@@ -99,9 +97,32 @@ class SynthIDWatermarker(Watermarker):
         )
 
         if indices is None:
-            return logp
-        out = torch.full_like(logits, float("-inf"))
-        return out.scatter(-1, indices, logp)
+            out = logp
+        else:
+            out = torch.full_like(logits, float("-inf"))
+            out = out.scatter(-1, indices, logp)
+        return out
+
+    def _apply_expected_g_update(
+        self, logp: torch.Tensor, words: tuple[torch.Tensor, ...]
+    ) -> torch.Tensor:
+        if (
+            logp.device.type == "cuda"
+            and self._num_words == 1
+            and logp.shape[1] <= _FUSED_UPDATE_MAX_CANDIDATES
+        ):
+            from vllm.v1.worker.gpu.sample.watermark import (
+                HAS_TRITON,
+                synthid_update,
+            )
+
+            if HAS_TRITON:
+                return synthid_update(logp, words[0], self.depth)
+        for layer in range(self.depth):
+            g = ((words[layer // 32] >> (layer % 32)) & 1).to(logp.dtype)
+            g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
+            logp = logp + torch.log1p(g - g_mass)
+        return logp
 
     def _mixed_logits(
         self,

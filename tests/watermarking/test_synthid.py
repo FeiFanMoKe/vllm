@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from vllm.config.watermarking import WatermarkConfig
+from vllm.platforms import current_platform
 from vllm.v1.watermarking import create_watermarker
 from vllm.v1.watermarking.synthid import (
     SynthIDWatermarkDetector,
@@ -55,6 +56,28 @@ def _reference_update(
 
 def _random_logits(batch: int, vocab: int, seed: int) -> torch.Tensor:
     return torch.randn(batch, vocab, generator=torch.Generator().manual_seed(seed))
+
+
+def _eager_update(logp: torch.Tensor, words: torch.Tensor, depth: int) -> torch.Tensor:
+    for layer in range(depth):
+        g = ((words >> (layer % 32)) & 1).to(logp.dtype)
+        g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
+        logp = logp + torch.log1p(g - g_mass)
+    return logp
+
+
+def _assert_update_close(actual: torch.Tensor, expected: torch.Tensor) -> None:
+    # The 30-layer multiplicative update amplifies tiny math-library
+    # differences on tail tokens; the sampling distribution is what matters.
+    torch.testing.assert_close(
+        actual.softmax(dim=-1),
+        expected.softmax(dim=-1),
+        atol=1e-7,
+        rtol=1e-5,
+    )
+    finite = torch.isfinite(expected)
+    torch.testing.assert_close(actual[finite], expected[finite], atol=5e-2, rtol=0)
+    assert torch.equal(torch.isfinite(actual), torch.isfinite(expected))
 
 
 def _random_contexts(batch: int, seed: int) -> torch.Tensor:
@@ -274,3 +297,75 @@ def test_factory_creates_synthid_watermarker():
     watermarker = create_watermarker(config)
     assert isinstance(watermarker, SynthIDWatermarker)
     assert watermarker.depth == 8
+
+
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator"
+)
+@pytest.mark.parametrize(
+    ("batch", "candidates"), [(1, 50), (4, 257), (8, 1024), (2, 4096)]
+)
+def test_fused_update_matches_eager(batch: int, candidates: int):
+    from vllm.v1.worker.gpu.sample.watermark import synthid_update
+
+    generator = torch.Generator(device="cuda").manual_seed(0)
+    logits = torch.randn(batch, candidates, device="cuda", generator=generator)
+    logp = logits.log_softmax(dim=-1)
+    words = torch.randint(
+        -(2**31),
+        2**31,
+        (batch, candidates),
+        dtype=torch.int64,
+        device="cuda",
+        generator=generator,
+    )
+    expected = _eager_update(logp, words, DEPTH)
+    actual = synthid_update(logp, words, DEPTH)
+    _assert_update_close(actual, expected)
+
+
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator"
+)
+def test_fused_update_handles_masked_candidates():
+    from vllm.v1.worker.gpu.sample.watermark import synthid_update
+
+    generator = torch.Generator(device="cuda").manual_seed(1)
+    logits = torch.randn(2, 128, device="cuda", generator=generator)
+    logits[:, 64:] = float("-inf")
+    logp = logits.log_softmax(dim=-1)
+    words = torch.randint(
+        -(2**31),
+        2**31,
+        (2, 128),
+        dtype=torch.int64,
+        device="cuda",
+        generator=generator,
+    )
+    expected = _eager_update(logp, words, DEPTH)
+    actual = synthid_update(logp, words, DEPTH)
+    _assert_update_close(actual, expected)
+
+
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator"
+)
+def test_transform_cuda_matches_cpu():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(2, VOCAB_SIZE, seed=11)
+    contexts = _random_contexts(2, seed=11)
+    expected = watermarker._transform_logits(logits, contexts)
+    actual = watermarker._transform_logits(logits.cuda(), contexts.cuda()).cpu()
+    _assert_update_close(actual, expected)
+
+
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator"
+)
+def test_transform_deep_cuda_falls_back():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, 64)
+    logits = _random_logits(2, VOCAB_SIZE, seed=12)
+    contexts = _random_contexts(2, seed=12)
+    expected = watermarker._transform_logits(logits, contexts)
+    actual = watermarker._transform_logits(logits.cuda(), contexts.cuda()).cpu()
+    _assert_update_close(actual, expected)
