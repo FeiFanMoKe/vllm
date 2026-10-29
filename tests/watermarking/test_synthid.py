@@ -45,7 +45,7 @@ def _reference_update(
         g = bits[layer].to(probs.dtype)
         for row in range(probs.shape[0]):
             g_mass = (g[row] * probs[row]).sum()
-            probs[row] = probs[row] * (1.0 + g[row] - g_mass)
+            probs[row] = probs[row] * (1.0 + watermarker.strength * (g[row] - g_mass))
     log_probs = torch.log(probs)
     return torch.where(
         torch.isfinite(logits),
@@ -58,11 +58,16 @@ def _random_logits(batch: int, vocab: int, seed: int) -> torch.Tensor:
     return torch.randn(batch, vocab, generator=torch.Generator().manual_seed(seed))
 
 
-def _eager_update(logp: torch.Tensor, words: torch.Tensor, depth: int) -> torch.Tensor:
+def _eager_update(
+    logp: torch.Tensor,
+    words: torch.Tensor,
+    depth: int,
+    strength: float = 1.0,
+) -> torch.Tensor:
     for layer in range(depth):
         g = ((words >> (layer % 32)) & 1).to(logp.dtype)
         g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
-        logp = logp + torch.log1p(g - g_mass)
+        logp = logp + torch.log1p(strength * (g - g_mass))
     return logp
 
 
@@ -108,6 +113,15 @@ def test_transform_matches_reference_implementation():
     _assert_same_distribution(actual, expected)
 
 
+def test_transform_matches_reference_with_strength():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH, strength=0.5)
+    logits = _random_logits(3, VOCAB_SIZE, seed=21)
+    contexts = _random_contexts(3, seed=21)
+    expected = _reference_update(logits, contexts, watermarker)
+    actual = watermarker._transform_logits(logits, contexts)
+    _assert_same_distribution(actual, expected)
+
+
 def test_transform_preserves_truncated_support():
     """Tokens excluded by top-k/top-p must stay at -inf after watermarking."""
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
@@ -141,6 +155,25 @@ def test_transform_all_masked_row_has_no_nan():
     assert not torch.isnan(transformed).any()
     assert torch.isneginf(transformed[0]).all()
     assert torch.isfinite(transformed[1]).all()
+
+
+def test_max_probability_gate_skips_peaked_rows():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH, max_probability=0.5)
+    logits = _random_logits(2, 128, seed=22)
+    logits[0, 0] = 20.0
+    contexts = _random_contexts(2, seed=22)
+    mixed = watermarker._mixed_logits(logits, contexts, None)
+    assert torch.equal(mixed[0], logits[0])
+    assert not torch.equal(mixed[1], logits[1])
+
+
+def test_max_probability_one_does_not_gate():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(1, 128, seed=23)
+    logits[0, 0] = 20.0
+    contexts = _random_contexts(1, seed=23)
+    mixed = watermarker._mixed_logits(logits, contexts, None)
+    assert not torch.equal(mixed[0], logits[0])
 
 
 def test_g_bits_deterministic_and_balanced_across_layers():
@@ -278,6 +311,14 @@ def test_invalid_parameters_rejected():
     with pytest.raises(ValueError):
         SynthIDWatermarker(KEY, depth=129)
     with pytest.raises(ValueError):
+        SynthIDWatermarker(KEY, strength=0.0)
+    with pytest.raises(ValueError):
+        SynthIDWatermarker(KEY, strength=1.5)
+    with pytest.raises(ValueError):
+        SynthIDWatermarker(KEY, max_probability=0.0)
+    with pytest.raises(ValueError):
+        SynthIDWatermarker(KEY, max_probability=1.5)
+    with pytest.raises(ValueError):
         SynthIDWatermarkDetector(KEY, depth=0)
     with pytest.raises(ValueError):
         SynthIDWatermarkDetector(KEY, depth=129)
@@ -293,10 +334,18 @@ def test_binomial_survival_matches_closed_form():
 
 
 def test_factory_creates_synthid_watermarker():
-    config = WatermarkConfig(key=KEY, algorithm="synthid", synthid_depth=8)
+    config = WatermarkConfig(
+        key=KEY,
+        algorithm="synthid",
+        synthid_depth=8,
+        synthid_strength=0.5,
+        synthid_max_probability=0.75,
+    )
     watermarker = create_watermarker(config)
     assert isinstance(watermarker, SynthIDWatermarker)
     assert watermarker.depth == 8
+    assert watermarker.strength == 0.5
+    assert watermarker.max_probability == 0.75
 
 
 @pytest.mark.skipif(
@@ -321,6 +370,29 @@ def test_fused_update_matches_eager(batch: int, candidates: int):
     )
     expected = _eager_update(logp, words, DEPTH)
     actual = synthid_update(logp, words, DEPTH)
+    _assert_update_close(actual, expected)
+
+
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator"
+)
+@pytest.mark.parametrize("strength", [0.25, 0.5])
+def test_fused_update_matches_eager_with_strength(strength: float):
+    from vllm.v1.worker.gpu.sample.watermark import synthid_update
+
+    generator = torch.Generator(device="cuda").manual_seed(2)
+    logits = torch.randn(2, 256, device="cuda", generator=generator)
+    logp = logits.log_softmax(dim=-1)
+    words = torch.randint(
+        -(2**31),
+        2**31,
+        (2, 256),
+        dtype=torch.int64,
+        device="cuda",
+        generator=generator,
+    )
+    expected = _eager_update(logp, words, DEPTH, strength)
+    actual = synthid_update(logp, words, DEPTH, strength)
     _assert_update_close(actual, expected)
 
 

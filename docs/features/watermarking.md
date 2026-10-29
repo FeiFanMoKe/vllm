@@ -255,6 +255,13 @@ candidate set. Per-step cost grows with the support size, so set `top_k` (for
 example 50, as in the reference examples) to bound it; without top-k/top-p the
 full vocabulary is processed on every step. There is no separate candidate cap.
 
+`synthid_strength` defaults to 1.0 and scales each layer's log-bias. Values
+below 1 reduce per-step distortion at the cost of detection power; 1.0 is the
+reference tournament update. `synthid_max_probability` defaults to 1.0
+(disabled) and skips watermarking a step when its largest post-truncation
+token probability exceeds the threshold, so low-entropy steps use ordinary
+sampling. Skipped steps only dilute detection.
+
 The first `context_width` generated tokens have an incomplete context and are
 not watermarked; detection skips them as well. Pass only the generated tokens
 to the detector, not the prompt, so that detection contexts match the contexts

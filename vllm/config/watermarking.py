@@ -36,6 +36,13 @@ class WatermarkConfig:
     synthid_depth: int = Field(default=30, ge=1, le=128)
     """Number of SynthID-Text g-value layers. All layer bits come from one
     keyed evaluation per (context, token), which provides up to 128 bits."""
+    synthid_strength: float = Field(default=1.0, gt=0, le=1)
+    """Scale of each SynthID-Text layer's log-bias. Values below 1 reduce
+    per-context distortion at the cost of detection power; 1.0 is the
+    reference tournament update."""
+    synthid_max_probability: float = Field(default=1.0, gt=0, le=1)
+    """Skip watermarking a request step when its largest post-truncation
+    token probability exceeds this value. 1.0 disables the gate."""
     context_width: int = Field(default=4, ge=1)
     """Number of prior tokens used by the watermark PRF."""
     deduplicate_contexts: WatermarkContextScope = "single_turn"

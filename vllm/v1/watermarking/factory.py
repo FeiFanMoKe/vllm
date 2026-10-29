@@ -26,5 +26,7 @@ def create_watermarker(config: WatermarkConfig) -> Watermarker:
             config.context_width,
             config.synthid_depth,
             config.prf,
+            config.synthid_strength,
+            config.synthid_max_probability,
         )
     raise ValueError(f"Unknown watermarking algorithm: {config.algorithm}")
