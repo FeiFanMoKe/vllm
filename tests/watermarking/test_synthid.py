@@ -48,7 +48,8 @@ def _reference_update(
         g = bits[layer].to(probs.dtype)
         for row in range(probs.shape[0]):
             g_mass = (g[row] * probs[row]).sum()
-            probs[row] = probs[row] * (1.0 + watermarker.strength * (g[row] - g_mass))
+            updated = probs[row] * (1.0 + watermarker.strength * (g[row] - g_mass))
+            probs[row] = updated.clamp_min(0.0)
     log_probs = torch.log(probs)
     return torch.where(
         torch.isfinite(logits),
@@ -70,7 +71,8 @@ def _eager_update(
     for layer in range(depth):
         g = ((words >> (layer % 32)) & 1).to(logp.dtype)
         g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
-        logp = logp + torch.log1p(strength * (g - g_mass))
+        bias = strength * (g - g_mass)
+        logp = logp + torch.log1p(bias.clamp_min(-1.0))
     return logp
 
 
@@ -95,6 +97,38 @@ def _random_contexts(batch: int, seed: int) -> torch.Tensor:
         (batch, CONTEXT_WIDTH),
         generator=torch.Generator().manual_seed(seed),
     )
+
+
+# One candidate carries almost all of the mass, so per-layer g_mass reaches 1
+# and the update factor for g=0 candidates reaches zero.
+_PEAKED_CANDIDATE_LOGITS = (
+    0.0,
+    -11.25,
+    -13.0625,
+    -13.25,
+    -13.75,
+    -13.9375,
+    -14.0625,
+    -14.375,
+    -14.5625,
+    -14.5625,
+    -14.875,
+    -14.875,
+    -15.0,
+    -15.375,
+    -15.375,
+    -15.4375,
+    -16.0,
+    -16.0625,
+    -16.1875,
+    -16.1875,
+)
+
+
+def _peaked_logits(candidate_ids: torch.Tensor) -> torch.Tensor:
+    logits = torch.full((1, VOCAB_SIZE), float("-inf"))
+    logits[0, candidate_ids] = torch.tensor(_PEAKED_CANDIDATE_LOGITS)
+    return logits
 
 
 def _assert_same_distribution(actual: torch.Tensor, expected: torch.Tensor) -> None:
@@ -158,6 +192,18 @@ def test_transform_all_masked_row_has_no_nan():
     assert not torch.isnan(transformed).any()
     assert torch.isneginf(transformed[0]).all()
     assert torch.isfinite(transformed[1]).all()
+
+
+def test_peaked_support_stays_finite():
+    # The update factor can reach zero when g_mass reaches 1. Rounded drift
+    # below zero used to turn the row into NaN and then all -inf.
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    candidate_ids = torch.arange(20)
+    logits = _peaked_logits(candidate_ids)
+    contexts = torch.tensor([[3, 4, 5, 6]])
+    out = watermarker._transform_logits(logits, contexts)
+    assert not torch.isnan(out).any()
+    assert torch.isfinite(out).any()
 
 
 def test_max_probability_gate_skips_peaked_rows():
@@ -425,6 +471,24 @@ def test_fused_update_handles_masked_candidates():
     )
     expected = _eager_update(logp, words, DEPTH)
     actual = synthid_update(logp, words, DEPTH)
+    _assert_update_close(actual, expected)
+
+
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator"
+)
+def test_fused_update_peaked_support_matches_eager():
+    from vllm.v1.worker.gpu.sample.watermark import synthid_update
+
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    candidate_ids = torch.arange(20)
+    logits = _peaked_logits(candidate_ids)
+    contexts = torch.tensor([[3, 4, 5, 6]])
+    words = watermarker.prf.bits(contexts, candidate_ids.unsqueeze(0), 1)[0]
+    logp = logits[0, candidate_ids].log_softmax(dim=-1).unsqueeze(0)
+    expected = _eager_update(logp, words, DEPTH)
+    actual = synthid_update(logp.cuda(), words.cuda(), DEPTH).cpu()
+    assert not torch.isnan(actual).any()
     _assert_update_close(actual, expected)
 
 

@@ -841,7 +841,8 @@ def _synthid_update_kernel(
         g = ((word >> (layer % 32)) & 1).to(tl.float32)
         probs = tl.where(mask, tl.exp(logp), 0.0)
         g_mass = tl.sum(probs * g, axis=0)
-        logp = logp + _synthid_log1p(strength * (g - g_mass))
+        bias = strength * (g - g_mass)
+        logp = logp + _synthid_log1p(tl.maximum(bias, -1.0))
 
     tl.store(out_ptr + row * stride_row + offs, logp, mask=mask)
 

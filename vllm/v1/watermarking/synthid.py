@@ -135,7 +135,8 @@ class SynthIDWatermarker(Watermarker):
         for layer in range(self.depth):
             g = ((words[layer // 32] >> (layer % 32)) & 1).to(logp.dtype)
             g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
-            logp = logp + torch.log1p(self.strength * (g - g_mass))
+            bias = self.strength * (g - g_mass)
+            logp = logp + torch.log1p(bias.clamp_min(-1.0))
         return logp
 
     def _mixed_logits(
