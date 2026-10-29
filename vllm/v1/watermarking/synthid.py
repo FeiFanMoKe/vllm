@@ -47,13 +47,21 @@ class SynthIDWatermarker(Watermarker):
         context_width: int = 4,
         depth: int = 30,
         prf: WatermarkPRFName = "philox",
+        strength: float = 1.0,
+        max_probability: float = 1.0,
     ) -> None:
         if context_width < 1:
             raise ValueError("context_width must be positive")
         if not 1 <= depth <= _MAX_DEPTH:
             raise ValueError(f"depth must be between 1 and {_MAX_DEPTH}")
+        if not 0 < strength <= 1:
+            raise ValueError("strength must be in (0, 1]")
+        if not 0 < max_probability <= 1:
+            raise ValueError("max_probability must be in (0, 1]")
         self.prf = create_prf(prf, derive_watermark_key(key, b"synthid"))
         self.depth = depth
+        self.strength = strength
+        self.max_probability = max_probability
         self._context_width = context_width
         self._num_words = (depth + 31) // 32
 
@@ -117,11 +125,11 @@ class SynthIDWatermarker(Watermarker):
             )
 
             if HAS_TRITON:
-                return synthid_update(logp, words[0], self.depth)
+                return synthid_update(logp, words[0], self.depth, self.strength)
         for layer in range(self.depth):
             g = ((words[layer // 32] >> (layer % 32)) & 1).to(logp.dtype)
             g_mass = (g * logp.exp()).sum(dim=-1, keepdim=True)
-            logp = logp + torch.log1p(g - g_mass)
+            logp = logp + torch.log1p(self.strength * (g - g_mass))
         return logp
 
     def _mixed_logits(
@@ -134,6 +142,9 @@ class SynthIDWatermarker(Watermarker):
         skip = (contexts < 0).any(dim=-1)
         if skip_mask is not None:
             skip = skip | skip_mask
+        if self.max_probability < 1.0:
+            max_prob = logits.to(torch.float32).softmax(dim=-1).amax(dim=-1)
+            skip = skip | (max_prob > self.max_probability)
         return torch.where(skip.unsqueeze(-1), logits, transformed)
 
     def sample(

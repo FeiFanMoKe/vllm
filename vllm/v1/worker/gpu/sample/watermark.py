@@ -817,6 +817,7 @@ def _synthid_update_kernel(
     out_ptr,
     num_candidates,
     stride_row,
+    strength,
     DEPTH: tl.constexpr,
     BLOCK_C: tl.constexpr,
 ):
@@ -840,7 +841,7 @@ def _synthid_update_kernel(
         g = ((word >> (layer % 32)) & 1).to(tl.float32)
         probs = tl.where(mask, tl.exp(logp), 0.0)
         g_mass = tl.sum(probs * g, axis=0)
-        logp = logp + _synthid_log1p(g - g_mass)
+        logp = logp + _synthid_log1p(strength * (g - g_mass))
 
     tl.store(out_ptr + row * stride_row + offs, logp, mask=mask)
 
@@ -849,6 +850,7 @@ def synthid_update(
     logp: torch.Tensor,
     words: torch.Tensor,
     depth: int,
+    strength: float = 1.0,
 ) -> torch.Tensor:
     """Fused 30-layer SynthID update over candidate log-probs.
 
@@ -856,6 +858,7 @@ def synthid_update(
         logp: (batch, candidates) float32 log-probabilities.
         words: (batch, candidates) int64 packed g-value bits.
         depth: number of layers, at most 32.
+        strength: scale of each layer's log-bias, in (0, 1].
 
     Returns:
         Updated (batch, candidates) log-probabilities.
@@ -877,6 +880,7 @@ def synthid_update(
         out,
         candidates,
         logp.stride(0),
+        strength,
         DEPTH=depth,
         BLOCK_C=block_c,
         num_warps=num_warps,

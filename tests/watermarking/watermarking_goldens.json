@@ -24,7 +24,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -123,7 +125,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -158,7 +162,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -257,7 +263,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -292,7 +300,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -391,7 +401,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -426,7 +438,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -525,7 +539,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -560,7 +576,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.003,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -603,7 +621,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -638,7 +658,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -737,7 +759,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -772,7 +796,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -871,7 +897,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -906,7 +934,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -989,7 +1019,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -1024,7 +1056,9 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -1107,7 +1141,9 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -1142,7 +1178,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -1241,7 +1279,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -1276,7 +1316,9 @@
           "generation_deduplicate_contexts": "none",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -1375,7 +1417,9 @@
           "deduplicate_contexts": "none",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -1410,7 +1454,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -1509,7 +1555,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -1544,7 +1592,9 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -1643,7 +1693,9 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -1684,7 +1736,9 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -1783,7 +1837,9 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -1818,7 +1874,9 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": null,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -1917,7 +1975,9 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": null,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -1952,7 +2012,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": null,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -2051,7 +2113,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": null,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -2086,7 +2150,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -2185,7 +2251,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -2220,7 +2288,9 @@
           "generation_deduplicate_contexts": "none",
           "generation_deduplicate_contexts_max_history": null,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -2319,7 +2389,9 @@
           "deduplicate_contexts": "none",
           "deduplicate_contexts_max_history": null,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -2354,7 +2426,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.0015,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -2397,7 +2471,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -2432,7 +2508,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -2531,7 +2609,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -2566,7 +2646,9 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -2665,7 +2747,9 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -2700,7 +2784,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -2783,7 +2869,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -2818,7 +2906,9 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -2901,7 +2991,9 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -2936,7 +3028,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -3035,7 +3129,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -3070,7 +3166,9 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -3169,7 +3267,9 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -3177,6 +3277,144 @@
         "key_b_effective": null,
         "key_b_routed": null,
         "partial_context_skips": 4,
+        "routing_draws": 0
+      }
+    },
+    "synthid-philox-key42-cw4-strength0.5": {
+      "configuration": {
+        "detection_key": "42",
+        "fixture": {
+          "dominant_bias": 0,
+          "dominant_token": null,
+          "logit_denominator": 16,
+          "logit_modulus": 131,
+          "num_tokens": 64,
+          "prompt": [],
+          "vocabulary_size": 128
+        },
+        "key": "42",
+        "prf": "philox",
+        "prf_version": "philox4x32-10-v1",
+        "scheme": "synthid",
+        "scheme_config": {
+          "context_width": 4,
+          "detection_alpha": 0.1,
+          "detection_deduplicate_contexts": true,
+          "generation_alpha": 0.1,
+          "generation_deduplicate_contexts": "single_turn",
+          "generation_deduplicate_contexts_max_history": 8192,
+          "p_value_threshold": 0.01,
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 0.5
+        }
+      },
+      "detection": {
+        "is_watermarked": true,
+        "num_scored_tokens": 60,
+        "p_value": 9.872539067523616e-51,
+        "p_value_ratio": 9.872539067523616e-49,
+        "score": 1214.0
+      },
+      "generation": [
+        46,
+        42,
+        38,
+        34,
+        47,
+        72,
+        22,
+        110,
+        113,
+        45,
+        52,
+        108,
+        104,
+        82,
+        43,
+        124,
+        102,
+        119,
+        119,
+        69,
+        33,
+        50,
+        53,
+        60,
+        123,
+        105,
+        34,
+        43,
+        15,
+        107,
+        57,
+        21,
+        63,
+        37,
+        87,
+        37,
+        89,
+        82,
+        25,
+        35,
+        63,
+        108,
+        58,
+        86,
+        22,
+        110,
+        102,
+        81,
+        116,
+        62,
+        108,
+        111,
+        4,
+        57,
+        120,
+        116,
+        34,
+        23,
+        76,
+        86,
+        57,
+        67,
+        21,
+        24
+      ],
+      "resolved": {
+        "derived_keys": {
+          "key_a": null,
+          "key_b": null
+        },
+        "detector": {
+          "alpha": null,
+          "context_width": 4,
+          "deduplicate_contexts": true,
+          "depth": 30,
+          "key_b_prf_key": null,
+          "p_value_threshold": 0.01,
+          "prf_key": "4397882800891660100",
+          "type": "SynthIDWatermarkDetector"
+        },
+        "watermark_config": {
+          "algorithm": "synthid",
+          "allow_target_only_watermarking": false,
+          "alpha": 0.1,
+          "context_width": 4,
+          "deduplicate_contexts": "single_turn",
+          "deduplicate_contexts_max_history": 8192,
+          "prf": "philox",
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 0.5
+        }
+      },
+      "trace": {
+        "dedup_skips": 0,
+        "key_b_effective": null,
+        "key_b_routed": null,
+        "partial_context_skips": 0,
         "routing_draws": 0
       }
     },
@@ -3204,7 +3442,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -3303,7 +3543,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 30
+          "synthid_depth": 30,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -3338,7 +3580,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 100
+          "synthid_depth": 100,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -3437,7 +3681,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 100
+          "synthid_depth": 100,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -3472,7 +3718,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 64
+          "synthid_depth": 64,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -3571,7 +3819,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 64
+          "synthid_depth": 64,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -3606,7 +3856,9 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
-          "synthid_depth": 8
+          "synthid_depth": 8,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "detection": {
@@ -3705,7 +3957,9 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
-          "synthid_depth": 8
+          "synthid_depth": 8,
+          "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
         }
       },
       "trace": {
@@ -3717,5 +3971,5 @@
       }
     }
   },
-  "schema_version": 5
+  "schema_version": 6
 }
