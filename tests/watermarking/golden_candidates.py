@@ -47,6 +47,7 @@ WATERMARK_CONFIG_FIELDS = (
     "synthid_depth",
     "synthid_strength",
     "synthid_max_probability",
+    "synthid_context_history_size",
     "context_width",
     "deduplicate_contexts",
     "deduplicate_contexts_max_history",
@@ -102,6 +103,7 @@ class WatermarkingSchemeConfig:
     synthid_depth: int = 30
     synthid_strength: float = 1.0
     synthid_max_probability: float = 1.0
+    synthid_context_history_size: int = 1024
     generation_deduplicate_contexts: WatermarkContextScope = "single_turn"
     generation_deduplicate_contexts_max_history: int | None = 8192
     detection_deduplicate_contexts: bool = True
@@ -184,6 +186,7 @@ def _create_synthid_detector(
         p_value_threshold=config.p_value_threshold,
         prf=prf,
         deduplicate_contexts=config.detection_deduplicate_contexts,
+        context_history_size=config.synthid_context_history_size,
     )
 
 
@@ -216,7 +219,12 @@ class WatermarkingCandidate:
                 "detection_alpha": self.scheme_config.detection_alpha,
                 "synthid_depth": self.scheme_config.synthid_depth,
                 "synthid_strength": self.scheme_config.synthid_strength,
-                "synthid_max_probability": (self.scheme_config.synthid_max_probability),
+                "synthid_max_probability": (
+                    self.scheme_config.synthid_max_probability
+                ),
+                "synthid_context_history_size": (
+                    self.scheme_config.synthid_context_history_size
+                ),
                 "generation_deduplicate_contexts": (
                     self.scheme_config.generation_deduplicate_contexts
                 ),
@@ -348,7 +356,11 @@ class WatermarkingCandidate:
                 "score": detection.score,
                 "p_value": detection.p_value,
                 "p_value_ratio": detection.p_value / threshold,
+                "log_p_value": detection.log_p_value,
+                "z_score": detection.z_score,
                 "num_scored_tokens": detection.num_scored_tokens,
+                "repeated_contexts": detection.repeated_contexts,
+                "duplicate_context_tokens": detection.duplicate_context_tokens,
                 "is_watermarked": detection.is_watermarked,
             },
         }
@@ -361,6 +373,9 @@ class WatermarkingCandidate:
             synthid_depth=self.scheme_config.synthid_depth,
             synthid_strength=self.scheme_config.synthid_strength,
             synthid_max_probability=self.scheme_config.synthid_max_probability,
+            synthid_context_history_size=(
+                self.scheme_config.synthid_context_history_size
+            ),
             context_width=self.scheme_config.context_width,
             deduplicate_contexts=(self.scheme_config.generation_deduplicate_contexts),
             deduplicate_contexts_max_history=(
@@ -399,13 +414,18 @@ class WatermarkingCandidate:
             storage[0, prompt_len : prompt_len + len(generated)] = torch.tensor(
                 generated
             )
+        max_history = (
+            self.scheme_config.synthid_context_history_size
+            if self.scheme == "synthid"
+            else self.scheme_config.generation_deduplicate_contexts_max_history
+        )
         return repeated_context_mask(
             storage,
             torch.tensor([0]),
             torch.tensor([prompt_len]),
             torch.tensor([prompt_len + len(generated)]),
             context,
-            self.scheme_config.generation_deduplicate_contexts_max_history,
+            max_history,
             include_prompt=scope == "all",
             skip_partial_context=scope == "all",
         )
@@ -440,6 +460,14 @@ MIDDLE_FIXTURE = DeterministicGenerationFixture(
     dominant_bias=16,
 )
 
+# Peaked enough that some rows exceed synthid_max_probability.
+GATED_FIXTURE = DeterministicGenerationFixture(
+    vocabulary_size=32,
+    num_tokens=64,
+    dominant_token=5,
+    dominant_bias=40,
+)
+
 # Few enough scored tokens that the p_value lands just under its threshold.
 NEAR_THRESHOLD_FIXTURE = DeterministicGenerationFixture(
     vocabulary_size=16,
@@ -460,6 +488,7 @@ def _candidate(
     synthid_depth: int = 30,
     synthid_strength: float = 1.0,
     synthid_max_probability: float = 1.0,
+    synthid_context_history_size: int = 1024,
     generation_deduplicate_contexts: WatermarkContextScope = "single_turn",
     generation_deduplicate_contexts_max_history: int | None = 8192,
     detection_deduplicate_contexts: bool = True,
@@ -478,6 +507,7 @@ def _candidate(
             synthid_depth=synthid_depth,
             synthid_strength=synthid_strength,
             synthid_max_probability=synthid_max_probability,
+            synthid_context_history_size=synthid_context_history_size,
             generation_deduplicate_contexts=generation_deduplicate_contexts,
             generation_deduplicate_contexts_max_history=(
                 generation_deduplicate_contexts_max_history
@@ -699,6 +729,14 @@ WATERMARKING_CANDIDATES = (
         synthid_strength=0.5,
     ),
     _candidate(
+        "synthid-philox-key7-cw4-gate0.5",
+        "synthid",
+        7,
+        prf="philox",
+        synthid_max_probability=0.5,
+        fixture=GATED_FIXTURE,
+    ),
+    _candidate(
         "synthid-philox-key42-cw4-all",
         "synthid",
         42,
@@ -888,9 +926,10 @@ def _compare_mapping(
 def compare_entries(produced: dict, golden: dict) -> list[str]:
     """Return one line per field that differs, empty when the two agree.
 
-    Configuration, resolved state, tokens, trace,
-    num_scored_tokens and is_watermarked are compared exactly; score, p_value
-    and p_value_ratio are compared with GOLDEN_FLOAT_RTOL.
+    Configuration, resolved state, tokens, trace, num_scored_tokens,
+    repeated_contexts, duplicate_context_tokens and is_watermarked are compared
+    exactly; score, p_value, p_value_ratio, log_p_value and z_score are
+    compared with GOLDEN_FLOAT_RTOL.
     """
     differences: list[str] = []
     for field in ("configuration", "resolved", "trace"):
@@ -916,14 +955,29 @@ def compare_entries(produced: dict, golden: dict) -> list[str]:
 
     detection = produced["detection"]
     expected_detection = golden["detection"]
-    for field in ("score", "p_value", "p_value_ratio"):
-        _compare_float(
-            f"detection.{field}",
-            detection[field],
-            expected_detection[field],
-            differences,
-        )
-    for field in ("num_scored_tokens", "is_watermarked"):
+    for field in ("score", "p_value", "p_value_ratio", "log_p_value", "z_score"):
+        actual_value = detection[field]
+        expected_value = expected_detection[field]
+        if actual_value is None or expected_value is None:
+            _compare_exact(
+                f"detection.{field}",
+                actual_value,
+                expected_value,
+                differences,
+            )
+        else:
+            _compare_float(
+                f"detection.{field}",
+                actual_value,
+                expected_value,
+                differences,
+            )
+    for field in (
+        "num_scored_tokens",
+        "repeated_contexts",
+        "duplicate_context_tokens",
+        "is_watermarked",
+    ):
         _compare_exact(
             f"detection.{field}",
             detection[field],

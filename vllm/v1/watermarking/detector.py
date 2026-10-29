@@ -16,6 +16,10 @@ class WatermarkDetection:
     p_value: float
     num_scored_tokens: int
     is_watermarked: bool
+    log_p_value: float | None = None
+    z_score: float | None = None
+    repeated_contexts: int = 0
+    duplicate_context_tokens: int = 0
 
 
 class WatermarkDetector(ABC):

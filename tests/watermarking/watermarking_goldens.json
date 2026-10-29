@@ -24,17 +24,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 55,
         "p_value": 2.7410983620034455e-44,
         "p_value_ratio": 2.7410983620034455e-42,
-        "score": 229.87923167230588
+        "repeated_contexts": 0,
+        "score": 229.87923167230588,
+        "z_score": null
       },
       "generation": [
         81,
@@ -125,6 +130,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -162,17 +168,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 1.234132682420224e-51,
         "p_value_ratio": 1.234132682420224e-49,
-        "score": 241.81126265648692
+        "repeated_contexts": 0,
+        "score": 241.81126265648692,
+        "z_score": null
       },
       "generation": [
         70,
@@ -263,6 +274,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -300,17 +312,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 6.733621085489817e-36,
         "p_value_ratio": 6.7336210854898174e-34,
-        "score": 162.0665949787407
+        "repeated_contexts": 0,
+        "score": 162.0665949787407,
+        "z_score": null
       },
       "generation": [
         53,
@@ -401,6 +418,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -438,17 +456,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 1.6569954931292397e-49,
         "p_value_ratio": 1.6569954931292398e-47,
-        "score": 215.24386344560963
+        "repeated_contexts": 0,
+        "score": 215.24386344560963,
+        "z_score": null
       },
       "generation": [
         46,
@@ -539,6 +562,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -576,17 +600,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.003,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 8,
-        "p_value": 0.002130807652336362,
-        "p_value_ratio": 0.710269217445454,
-        "score": 17.2829982488662
+        "p_value": 0.002130807652336366,
+        "p_value_ratio": 0.7102692174454553,
+        "repeated_contexts": 0,
+        "score": 17.2829982488662,
+        "z_score": null
       },
       "generation": [
         7,
@@ -621,6 +650,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -658,17 +688,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 2.5582243247165326e-52,
         "p_value_ratio": 2.558224324716533e-50,
-        "score": 270.9771333793902
+        "repeated_contexts": 0,
+        "score": 270.9771333793902,
+        "z_score": null
       },
       "generation": [
         45,
@@ -759,6 +794,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -796,17 +832,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
-        "p_value": 5.971314941880098e-43,
-        "p_value_ratio": 5.971314941880098e-41,
-        "score": 177.9826642464337
+        "p_value": 5.9713149418801004e-43,
+        "p_value_ratio": 5.9713149418801e-41,
+        "repeated_contexts": 0,
+        "score": 177.98266424643373,
+        "z_score": null
       },
       "generation": [
         7,
@@ -897,6 +938,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -934,17 +976,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 13,
-        "p_value": 0.002750266035191537,
-        "p_value_ratio": 0.2750266035191537,
-        "score": 23.896456918277966
+        "p_value": 0.002750266035191538,
+        "p_value_ratio": 0.2750266035191538,
+        "repeated_contexts": 0,
+        "score": 23.896456918277963,
+        "z_score": null
       },
       "generation": [
         3,
@@ -1019,6 +1066,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -1056,17 +1104,22 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 47,
         "p_value": 8.656644652657153e-07,
         "p_value_ratio": 8.656644652657152e-05,
-        "score": 82.86886159792212
+        "repeated_contexts": 0,
+        "score": 82.86886159792212,
+        "z_score": null
       },
       "generation": [
         3,
@@ -1141,6 +1194,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -1178,17 +1232,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 54,
         "p_value": 4.532248480235615e-47,
         "p_value_ratio": 4.532248480235615e-45,
-        "score": 236.2768211235414
+        "repeated_contexts": 0,
+        "score": 236.2768211235414,
+        "z_score": null
       },
       "generation": [
         24,
@@ -1279,6 +1338,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -1316,17 +1376,22 @@
           "generation_deduplicate_contexts": "none",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 1.1027575381260964e-49,
         "p_value_ratio": 1.1027575381260964e-47,
-        "score": 263.04926919645095
+        "repeated_contexts": 0,
+        "score": 263.04926919645095,
+        "z_score": null
       },
       "generation": [
         21,
@@ -1417,6 +1482,7 @@
           "deduplicate_contexts": "none",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -1454,17 +1520,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 7.128196280874065e-61,
         "p_value_ratio": 7.128196280874065e-59,
-        "score": 296.27295787856264
+        "repeated_contexts": 0,
+        "score": 296.27295787856264,
+        "z_score": null
       },
       "generation": [
         46,
@@ -1555,6 +1626,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -1592,17 +1664,22 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 6.0283750962334736e-55,
         "p_value_ratio": 6.028375096233473e-53,
-        "score": 278.8159437407263
+        "repeated_contexts": 0,
+        "score": 278.8159437407263,
+        "z_score": null
       },
       "generation": [
         46,
@@ -1693,6 +1770,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -1736,17 +1814,22 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 4.330336079473992e-56,
         "p_value_ratio": 4.3303360794739913e-54,
-        "score": 282.2076506349452
+        "repeated_contexts": 0,
+        "score": 282.2076506349452,
+        "z_score": null
       },
       "generation": [
         46,
@@ -1837,6 +1920,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -1874,17 +1958,22 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": null,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 58,
         "p_value": 1.6692708568346358e-08,
         "p_value_ratio": 1.6692708568346358e-06,
-        "score": 110.3077257312174
+        "repeated_contexts": 0,
+        "score": 110.3077257312174,
+        "z_score": null
       },
       "generation": [
         7,
@@ -1975,6 +2064,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": null,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -2012,17 +2102,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": null,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 58,
-        "p_value": 1.3019898400615858e-08,
-        "p_value_ratio": 1.3019898400615858e-06,
-        "score": 110.8113411435168
+        "p_value": 1.3019898400616044e-08,
+        "p_value_ratio": 1.3019898400616043e-06,
+        "repeated_contexts": 0,
+        "score": 110.81134114351678,
+        "z_score": null
       },
       "generation": [
         7,
@@ -2113,6 +2208,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": null,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -2150,17 +2246,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 58,
         "p_value": 2.772032243308163e-09,
         "p_value_ratio": 2.772032243308163e-07,
-        "score": 113.89758610123921
+        "repeated_contexts": 0,
+        "score": 113.89758610123921,
+        "z_score": null
       },
       "generation": [
         7,
@@ -2251,6 +2352,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -2288,17 +2390,22 @@
           "generation_deduplicate_contexts": "none",
           "generation_deduplicate_contexts_max_history": null,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 2.136704912577492e-10,
         "p_value_ratio": 2.136704912577492e-08,
-        "score": 127.21876922102206
+        "repeated_contexts": 0,
+        "score": 127.21876922102206,
+        "z_score": null
       },
       "generation": [
         7,
@@ -2389,6 +2496,7 @@
           "deduplicate_contexts": "none",
           "deduplicate_contexts_max_history": null,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -2426,17 +2534,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.0015,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 8,
         "p_value": 0.0009697880157637389,
         "p_value_ratio": 0.6465253438424926,
-        "score": 19.672172609864035
+        "repeated_contexts": 0,
+        "score": 19.672172609864035,
+        "z_score": null
       },
       "generation": [
         7,
@@ -2471,6 +2584,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -2508,17 +2622,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": false,
+        "log_p_value": null,
         "num_scored_tokens": 64,
         "p_value": 0.5208447936891313,
         "p_value_ratio": 52.08447936891313,
-        "score": 63.25096716585621
+        "repeated_contexts": 0,
+        "score": 63.25096716585621,
+        "z_score": null
       },
       "generation": [
         46,
@@ -2609,6 +2728,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -2646,17 +2766,22 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 64,
-        "p_value": 6.166345567165222e-36,
-        "p_value_ratio": 6.166345567165221e-34,
-        "score": 220.27675734217124
+        "p_value": 6.166345567165398e-36,
+        "p_value_ratio": 6.1663455671653984e-34,
+        "repeated_contexts": 0,
+        "score": 220.2767573421712,
+        "z_score": null
       },
       "generation": [
         46,
@@ -2747,6 +2872,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -2784,17 +2910,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 15,
         "p_value": 6.97501804959627e-05,
         "p_value_ratio": 0.00697501804959627,
-        "score": 34.40948699058768
+        "repeated_contexts": 0,
+        "score": 34.40948699058768,
+        "z_score": null
       },
       "generation": [
         14,
@@ -2869,6 +3000,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -2906,17 +3038,22 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": null,
         "num_scored_tokens": 47,
-        "p_value": 6.687298332874737e-08,
-        "p_value_ratio": 6.687298332874737e-06,
-        "score": 92.47607252164308
+        "p_value": 6.687298332875021e-08,
+        "p_value_ratio": 6.687298332875021e-06,
+        "repeated_contexts": 0,
+        "score": 92.47607252164309,
+        "z_score": null
       },
       "generation": [
         3,
@@ -2991,6 +3128,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -3028,17 +3166,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": -115.87359512546088,
         "num_scored_tokens": 60,
         "p_value": 4.7504750198976475e-51,
         "p_value_ratio": 4.750475019897648e-49,
-        "score": 1215.0
+        "repeated_contexts": 0,
+        "score": 1215.0,
+        "z_score": 14.849242404917497
       },
       "generation": [
         46,
@@ -3129,6 +3272,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -3166,17 +3310,22 @@
           "generation_deduplicate_contexts": "all",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": -115.87359512546088,
         "num_scored_tokens": 60,
         "p_value": 4.7504750198976475e-51,
         "p_value_ratio": 4.750475019897648e-49,
-        "score": 1215.0
+        "repeated_contexts": 0,
+        "score": 1215.0,
+        "z_score": 14.849242404917497
       },
       "generation": [
         46,
@@ -3267,6 +3416,7 @@
           "deduplicate_contexts": "all",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -3304,17 +3454,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 0.5
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": -115.14208267131875,
         "num_scored_tokens": 60,
         "p_value": 9.872539067523616e-51,
         "p_value_ratio": 9.872539067523616e-49,
-        "score": 1214.0
+        "repeated_contexts": 0,
+        "score": 1214.0,
+        "z_score": 14.802101952838393
       },
       "generation": [
         46,
@@ -3405,6 +3560,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 0.5
@@ -3442,17 +3598,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": false,
+        "log_p_value": -1.8617162004984626,
         "num_scored_tokens": 60,
         "p_value": 0.15540569404580565,
         "p_value_ratio": 15.540569404580564,
-        "score": 922.0
+        "repeated_contexts": 0,
+        "score": 922.0,
+        "z_score": 1.0370899457402696
       },
       "generation": [
         46,
@@ -3543,6 +3704,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 30,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -3580,17 +3742,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 100,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": -64.74449519587017,
         "num_scored_tokens": 60,
         "p_value": 7.617684871955893e-29,
         "p_value_ratio": 7.617684871955894e-27,
-        "score": 3429.0
+        "repeated_contexts": 0,
+        "score": 3429.0,
+        "z_score": 11.076732370153213
       },
       "generation": [
         46,
@@ -3681,6 +3848,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 100,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -3718,17 +3886,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 64,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": -88.92493042069951,
         "num_scored_tokens": 60,
         "p_value": 2.401006936088804e-39,
         "p_value_ratio": 2.401006936088804e-37,
-        "score": 2324.0
+        "repeated_contexts": 0,
+        "score": 2324.0,
+        "z_score": 13.039043932231637
       },
       "generation": [
         46,
@@ -3819,6 +3992,7 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 64,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
@@ -3856,17 +4030,22 @@
           "generation_deduplicate_contexts": "single_turn",
           "generation_deduplicate_contexts_max_history": 8192,
           "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
           "synthid_depth": 8,
           "synthid_max_probability": 1.0,
           "synthid_strength": 1.0
         }
       },
       "detection": {
+        "duplicate_context_tokens": 0,
         "is_watermarked": true,
+        "log_p_value": -111.38181361489153,
         "num_scored_tokens": 60,
         "p_value": 4.241241113319924e-49,
         "p_value_ratio": 4.2412411133199236e-47,
-        "score": 395.0
+        "repeated_contexts": 0,
+        "score": 395.0,
+        "z_score": 14.149499402216792
       },
       "generation": [
         46,
@@ -3957,8 +4136,153 @@
           "deduplicate_contexts": "single_turn",
           "deduplicate_contexts_max_history": 8192,
           "prf": "philox",
+          "synthid_context_history_size": 1024,
           "synthid_depth": 8,
           "synthid_max_probability": 1.0,
+          "synthid_strength": 1.0
+        }
+      },
+      "trace": {
+        "dedup_skips": 0,
+        "key_b_effective": null,
+        "key_b_routed": null,
+        "partial_context_skips": 0,
+        "routing_draws": 0
+      }
+    },
+    "synthid-philox-key7-cw4-gate0.5": {
+      "configuration": {
+        "detection_key": "7",
+        "fixture": {
+          "dominant_bias": 40,
+          "dominant_token": 5,
+          "logit_denominator": 16,
+          "logit_modulus": 131,
+          "num_tokens": 64,
+          "prompt": [],
+          "vocabulary_size": 32
+        },
+        "key": "7",
+        "prf": "philox",
+        "prf_version": "philox4x32-10-v1",
+        "scheme": "synthid",
+        "scheme_config": {
+          "context_width": 4,
+          "detection_alpha": 0.1,
+          "detection_deduplicate_contexts": true,
+          "generation_alpha": 0.1,
+          "generation_deduplicate_contexts": "single_turn",
+          "generation_deduplicate_contexts_max_history": 8192,
+          "p_value_threshold": 0.01,
+          "synthid_context_history_size": 1024,
+          "synthid_depth": 30,
+          "synthid_max_probability": 0.5,
+          "synthid_strength": 1.0
+        }
+      },
+      "detection": {
+        "duplicate_context_tokens": 0,
+        "is_watermarked": true,
+        "log_p_value": -49.60436839855743,
+        "num_scored_tokens": 60,
+        "p_value": 2.8648146323170275e-22,
+        "p_value_ratio": 2.8648146323170275e-20,
+        "repeated_contexts": 0,
+        "score": 1104.0,
+        "z_score": 9.616652224137045
+      },
+      "generation": [
+        7,
+        3,
+        5,
+        5,
+        5,
+        26,
+        21,
+        18,
+        28,
+        6,
+        27,
+        5,
+        5,
+        11,
+        4,
+        6,
+        28,
+        24,
+        5,
+        5,
+        11,
+        15,
+        31,
+        10,
+        13,
+        6,
+        9,
+        5,
+        25,
+        25,
+        0,
+        6,
+        9,
+        20,
+        9,
+        5,
+        1,
+        4,
+        17,
+        21,
+        8,
+        5,
+        30,
+        5,
+        8,
+        4,
+        24,
+        3,
+        27,
+        30,
+        5,
+        15,
+        22,
+        21,
+        24,
+        3,
+        13,
+        16,
+        5,
+        22,
+        25,
+        28,
+        3,
+        31
+      ],
+      "resolved": {
+        "derived_keys": {
+          "key_a": null,
+          "key_b": null
+        },
+        "detector": {
+          "alpha": null,
+          "context_width": 4,
+          "deduplicate_contexts": true,
+          "depth": 30,
+          "key_b_prf_key": null,
+          "p_value_threshold": 0.01,
+          "prf_key": "5226029697062786135",
+          "type": "SynthIDWatermarkDetector"
+        },
+        "watermark_config": {
+          "algorithm": "synthid",
+          "allow_target_only_watermarking": false,
+          "alpha": 0.1,
+          "context_width": 4,
+          "deduplicate_contexts": "single_turn",
+          "deduplicate_contexts_max_history": 8192,
+          "prf": "philox",
+          "synthid_context_history_size": 1024,
+          "synthid_depth": 30,
+          "synthid_max_probability": 0.5,
           "synthid_strength": 1.0
         }
       },

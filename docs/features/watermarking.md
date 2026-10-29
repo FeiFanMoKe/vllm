@@ -260,12 +260,21 @@ below 1 reduce per-step distortion at the cost of detection power; 1.0 is the
 reference tournament update. `synthid_max_probability` defaults to 1.0
 (disabled) and skips watermarking a step when its largest post-truncation
 token probability exceeds the threshold, so low-entropy steps use ordinary
-sampling. Skipped steps only dilute detection.
+sampling. Skipped steps only dilute detection. Neither setting changes
+detection: the detector counts raw g-values.
 
 The first `context_width` generated tokens have an incomplete context and are
 not watermarked; detection skips them as well. Pass only the generated tokens
 to the detector, not the prompt, so that detection contexts match the contexts
-seen during generation.
+seen during generation. With `deduplicate_contexts="all"`, generation also
+skips contexts found in the prompt; the detector cannot reproduce that check
+from generated tokens alone and counts those unwatermarked tokens, which
+reduces detection power.
+
+`synthid_context_history_size` defaults to 1024 and must match between
+generation and detection. A context repeated within that many recent contexts
+is not reweighted; the detector applies the same window and scores each
+distinct `(context, token)` pair once.
 
 Like Gumbel-max, SynthID-Text requires stochastic sampling: greedy requests
 (`temperature=0`) and `top_k=1` requests bypass watermarking. SynthID does not
@@ -273,13 +282,18 @@ support speculative decoding, including target-only watermarking; the engine
 rejects that combination.
 
 Detection counts the g=1 votes over all scored tokens and layers and derives a
-p-value from the binomial null distribution:
+p-value from the binomial null distribution. `log_p_value` avoids underflow on
+long texts, `z_score` is the standardized count, and
+`repeated_contexts`/`duplicate_context_tokens` report positions skipped by the
+repetition window and the pair dedup. Pass `eos_token_id` to stop at the first
+EOS.
 
 ```python
 from vllm.v1.watermarking import SynthIDWatermarkDetector
 
-result = SynthIDWatermarkDetector(key=42).detect(generated_token_ids)
-print(result.p_value, result.is_watermarked)
+detector = SynthIDWatermarkDetector(key=42, context_history_size=1024)
+result = detector.detect(generated_token_ids)
+print(result.p_value, result.log_p_value, result.z_score, result.is_watermarked)
 ```
 
 The watermark keys and PRF differ from Google DeepMind's reference

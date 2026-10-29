@@ -127,13 +127,16 @@ class GPUWatermarkSampler(Sampler):
         contexts: torch.Tensor,
         expanded_local_pos: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        max_history = self.deduplicate_contexts_max_history
+        if self.watermarker.dedup_history_size is not None:
+            max_history = self.watermarker.dedup_history_size
         repeated = repeated_context_mask(
             self.req_states.all_token_ids.gpu,
             expanded_idx_mapping,
             self.req_states.prompt_len.gpu,
             self.req_states.total_len.gpu,
             contexts,
-            self.deduplicate_contexts_max_history,
+            max_history,
             include_prompt=self.deduplicate_contexts == "all",
             skip_partial_context=(
                 self.deduplicate_contexts == "all" and expanded_local_pos is None

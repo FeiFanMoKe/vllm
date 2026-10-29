@@ -43,6 +43,9 @@ class WatermarkConfig:
     synthid_max_probability: float = Field(default=1.0, gt=0, le=1)
     """Skip watermarking a request step when its largest post-truncation
     token probability exceeds this value. 1.0 disables the gate."""
+    synthid_context_history_size: int = Field(default=1024, ge=1)
+    """Number of recent generated contexts SynthID searches for repeats.
+    Must match the detector's `context_history_size`."""
     context_width: int = Field(default=4, ge=1)
     """Number of prior tokens used by the watermark PRF."""
     deduplicate_contexts: WatermarkContextScope = "single_turn"
@@ -55,7 +58,7 @@ class WatermarkConfig:
     """Number of most recent history positions searched (default 8192), or
     `None` for the whole scope. Each position is compared over the
     `context_width` tokens before it. Ignored when `deduplicate_contexts` is
-    `none`."""
+    `none`. SynthID-Text uses `synthid_context_history_size` instead."""
     prf: WatermarkPRFName = "philox"
     """Pseudorandom function used by the watermarking algorithm."""
     allow_target_only_watermarking: bool = False

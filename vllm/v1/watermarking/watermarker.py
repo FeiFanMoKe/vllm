@@ -45,6 +45,8 @@ class RandomSampler:
 
 
 class Watermarker(ABC):
+    dedup_history_size: int | None = None
+
     @property
     @abstractmethod
     def context_width(self) -> int:
