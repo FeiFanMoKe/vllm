@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+import math
+
 import pytest
 import torch
 
@@ -10,6 +12,7 @@ from vllm.v1.watermarking import create_watermarker
 from vllm.v1.watermarking.synthid import (
     SynthIDWatermarkDetector,
     SynthIDWatermarker,
+    _binomial_log_survival,
     _binomial_survival,
 )
 
@@ -319,9 +322,13 @@ def test_invalid_parameters_rejected():
     with pytest.raises(ValueError):
         SynthIDWatermarker(KEY, max_probability=1.5)
     with pytest.raises(ValueError):
+        SynthIDWatermarker(KEY, context_history_size=0)
+    with pytest.raises(ValueError):
         SynthIDWatermarkDetector(KEY, depth=0)
     with pytest.raises(ValueError):
         SynthIDWatermarkDetector(KEY, depth=129)
+    with pytest.raises(ValueError):
+        SynthIDWatermarkDetector(KEY, context_history_size=0)
 
 
 def test_binomial_survival_matches_closed_form():
@@ -340,12 +347,14 @@ def test_factory_creates_synthid_watermarker():
         synthid_depth=8,
         synthid_strength=0.5,
         synthid_max_probability=0.75,
+        synthid_context_history_size=512,
     )
     watermarker = create_watermarker(config)
     assert isinstance(watermarker, SynthIDWatermarker)
     assert watermarker.depth == 8
     assert watermarker.strength == 0.5
     assert watermarker.max_probability == 0.75
+    assert watermarker.dedup_history_size == 512
 
 
 @pytest.mark.skipif(
@@ -441,3 +450,45 @@ def test_transform_deep_cuda_falls_back():
     expected = watermarker._transform_logits(logits, contexts)
     actual = watermarker._transform_logits(logits.cuda(), contexts.cuda()).cpu()
     _assert_update_close(actual, expected)
+
+
+def test_detector_context_history_window():
+    detector = SynthIDWatermarkDetector(
+        KEY, CONTEXT_WIDTH, DEPTH, context_history_size=1024
+    )
+    tokens = [1, 2, 3, 4] + [5] * 1030 + [1, 2, 3, 4] + [6]
+    result = detector.detect(tokens)
+    assert result.repeated_contexts == 1026
+    assert result.num_scored_tokens == 9
+    assert result.duplicate_context_tokens == 0
+
+    duplicate = detector.detect([1, 2, 3, 4] + [5] * 1030 + [1, 2, 3, 4] + [5])
+    assert duplicate.duplicate_context_tokens == 1
+    assert duplicate.num_scored_tokens == 8
+
+
+def test_detector_eos_mask():
+    detector = SynthIDWatermarkDetector(KEY, CONTEXT_WIDTH, DEPTH, eos_token_id=99)
+    tokens = list(range(10)) + [99] + list(range(10))
+    result = detector.detect(tokens)
+    assert result.num_scored_tokens == 6
+
+
+def test_detection_reports_log_p_and_z_score():
+    detector = SynthIDWatermarkDetector(KEY, CONTEXT_WIDTH, DEPTH)
+    result = detector.detect(list(range(200)))
+    trials = result.num_scored_tokens * DEPTH
+    assert result.z_score == pytest.approx(
+        (result.score - trials / 2) / math.sqrt(trials / 4)
+    )
+    assert result.log_p_value is not None
+    if result.p_value > 0:
+        assert result.log_p_value == pytest.approx(math.log(result.p_value), rel=1e-6)
+    else:
+        assert result.log_p_value < -700
+
+
+def test_binomial_log_survival_matches_probability():
+    for k, n in ((1, 10), (3, 10), (8, 10), (50, 100)):
+        expected = math.log(_binomial_survival(k, n))
+        assert _binomial_log_survival(k, n) == pytest.approx(expected, rel=1e-9)
