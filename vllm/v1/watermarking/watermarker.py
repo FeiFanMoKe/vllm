@@ -24,6 +24,7 @@ class RandomSampler:
     positions: torch.Tensor
     use_fp64: bool = False
     is_drafting: bool = False
+    candidate_bound: int | None = None
     logits_cache: torch.Tensor | None = None
     logits_cache_col: torch.Tensor | None = None
     logits_cache_source: torch.Tensor | None = None

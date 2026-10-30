@@ -8,7 +8,7 @@ import torch
 
 from vllm.logger import init_logger
 from vllm.sampling_params import SamplingParams
-from vllm.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
+from vllm.v1.sample.ops.topk_topp_sampler import HAS_TRITON, apply_top_k_top_p
 from vllm.v1.watermarking.watermarker import RandomSampler, Watermarker
 from vllm.v1.worker.gpu.buffer_utils import UvaBackedTensor
 from vllm.v1.worker.gpu.sample.sampler import Sampler
@@ -105,6 +105,11 @@ class GPUWatermarkSampler(Sampler):
             seeds=self.sampling_states.seeds.gpu,
             positions=pos,
             use_fp64=self.use_fp64_gumbel,
+            candidate_bound=self._get_candidate_bound(
+                top_k,
+                idx_mapping_np,
+                exact_support=HAS_TRITON and processed_logits.device.type != "cpu",
+            ),
         )
         output = self.watermarker.sample(
             processed_logits,
@@ -121,6 +126,16 @@ class GPUWatermarkSampler(Sampler):
         )
         return sampled, output_logits
 
+    def _get_candidate_bound(
+        self,
+        top_k: torch.Tensor | None,
+        idx_mapping_np: np.ndarray,
+        exact_support: bool,
+    ) -> int | None:
+        if top_k is None or not exact_support:
+            return None
+        return int(self.sampling_states.top_k.np[idx_mapping_np].max())
+
     def _get_repeated_contexts(
         self,
         expanded_idx_mapping: torch.Tensor,
@@ -128,8 +143,11 @@ class GPUWatermarkSampler(Sampler):
         expanded_local_pos: torch.Tensor | None = None,
     ) -> torch.Tensor:
         max_history = self.deduplicate_contexts_max_history
-        if self.watermarker.dedup_history_size is not None:
-            max_history = self.watermarker.dedup_history_size
+        dedup_history_size = getattr(
+            getattr(self, "watermarker", None), "dedup_history_size", None
+        )
+        if dedup_history_size is not None:
+            max_history = dedup_history_size
         repeated = repeated_context_mask(
             self.req_states.all_token_ids.gpu,
             expanded_idx_mapping,

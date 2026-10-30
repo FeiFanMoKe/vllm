@@ -183,6 +183,44 @@ def test_transform_exact_with_per_row_support():
     _assert_same_distribution(actual, expected)
 
 
+def test_transform_candidate_bound_matches_dynamic_support():
+    """A known support bound must avoid the sync without changing the update."""
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(3, VOCAB_SIZE, seed=2)
+    logits[0, 400:] = float("-inf")
+    logits[1, 250:] = float("-inf")
+    logits[2, 10:] = float("-inf")
+    contexts = _random_contexts(3, seed=2)
+    expected = watermarker._transform_logits(logits, contexts)
+    actual = watermarker._transform_logits(logits, contexts, candidate_bound=400)
+    _assert_same_distribution(actual, expected)
+    full_bound = watermarker._transform_logits(
+        logits, contexts, candidate_bound=VOCAB_SIZE
+    )
+    _assert_same_distribution(full_bound, expected)
+
+
+def test_transform_candidate_bound_handles_all_masked_rows():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(2, VOCAB_SIZE, seed=3)
+    logits[0] = float("-inf")
+    logits[1, 20:] = float("-inf")
+    contexts = _random_contexts(2, seed=3)
+    transformed = watermarker._transform_logits(logits, contexts, candidate_bound=20)
+    expected = watermarker._transform_logits(logits, contexts)
+    assert not torch.isnan(transformed).any()
+    assert torch.isneginf(transformed[0]).all()
+    assert torch.equal(transformed[1], expected[1])
+
+
+def test_transform_candidate_bound_rejects_zero():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(1, VOCAB_SIZE, seed=3)
+    contexts = _random_contexts(1, seed=3)
+    with pytest.raises(ValueError, match="candidate_bound"):
+        watermarker._transform_logits(logits, contexts, candidate_bound=0)
+
+
 def test_transform_all_masked_row_has_no_nan():
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
     logits = _random_logits(2, VOCAB_SIZE, seed=3)
@@ -352,6 +390,21 @@ def test_sample_skips_rows_with_partial_contexts():
     assert torch.equal(skipped.logits[1], logits[1])
 
 
+def test_sample_propagates_candidate_bound():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(1, VOCAB_SIZE, seed=8)
+    logits[:, 20:] = float("-inf")
+    contexts = _random_contexts(1, seed=8)
+
+    def argmax_sampler(logits: torch.Tensor) -> torch.Tensor:
+        return logits.argmax(dim=-1)
+
+    argmax_sampler.candidate_bound = 20
+    sampled = watermarker.sample(logits, contexts, argmax_sampler)
+    expected = watermarker._transform_logits(logits, contexts, candidate_bound=20)
+    assert torch.equal(sampled.logits, expected)
+
+
 def test_invalid_parameters_rejected():
     with pytest.raises(ValueError):
         SynthIDWatermarker(KEY, context_width=0)
@@ -502,6 +555,24 @@ def test_transform_cuda_matches_cpu():
     expected = watermarker._transform_logits(logits, contexts)
     actual = watermarker._transform_logits(logits.cuda(), contexts.cuda()).cpu()
     _assert_update_close(actual, expected)
+
+
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator"
+)
+def test_transform_candidate_bound_cuda_matches_cpu():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(2, VOCAB_SIZE, seed=11)
+    logits[:, 20:] = float("-inf")
+    logits[0] = float("-inf")
+    contexts = _random_contexts(2, seed=11)
+    expected = watermarker._transform_logits(logits, contexts, candidate_bound=20)
+    actual = watermarker._transform_logits(
+        logits.cuda(), contexts.cuda(), candidate_bound=20
+    ).cpu()
+    assert not torch.isnan(actual).any()
+    assert torch.isneginf(actual[0]).all()
+    _assert_update_close(actual[1:], expected[1:])
 
 
 @pytest.mark.skipif(
