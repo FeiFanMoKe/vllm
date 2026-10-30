@@ -55,13 +55,12 @@ def _philox4x32_10(
     return counter_0, counter_1, counter_2, counter_3
 
 
-def _philox_uint32(
+def _philox_context_state(
     key_0_value: int,
     key_1_value: int,
     contexts: torch.Tensor,
-    token_ids: torch.Tensor,
-) -> torch.Tensor:
-    """Raw uint32 outputs (held in int64) of the keyed Philox mapping."""
+) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...]]:
+    """Absorb the token context into the keyed Philox state."""
     contexts = contexts.to(torch.int64) & _UINT32_MASK
     prefix_shape = contexts.shape[:-1]
     device = contexts.device
@@ -98,8 +97,18 @@ def _philox_uint32(
             (state[index] ^ block[index]) & _UINT32_MASK for index in range(4)
         )
         state = _philox4x32_10(counter, ((key_0 ^ offset) & _UINT32_MASK, key_1))
+    return key_0, key_1, state
 
-    output_shape = torch.broadcast_shapes(prefix_shape + (1,), token_ids.shape)
+
+def _philox_uniform(
+    key_0_value: int,
+    key_1_value: int,
+    contexts: torch.Tensor,
+    token_ids: torch.Tensor,
+) -> torch.Tensor:
+    key_0, key_1, state = _philox_context_state(key_0_value, key_1_value, contexts)
+    device = contexts.device
+    output_shape = torch.broadcast_shapes(contexts.shape[:-1] + (1,), token_ids.shape)
     tokens = torch.broadcast_to(token_ids.to(device=device), output_shape)
     state = tuple(
         torch.broadcast_to(word.unsqueeze(-1), output_shape) for word in state
@@ -123,18 +132,7 @@ def _philox_uint32(
     output = outputs[0]
     for index in range(1, 4):
         output = torch.where(word_index == index, outputs[index], output)
-    return output
-
-
-def _philox_uniform(
-    key_0_value: int,
-    key_1_value: int,
-    contexts: torch.Tensor,
-    token_ids: torch.Tensor,
-) -> torch.Tensor:
-    return uint32_to_uniform(
-        _philox_uint32(key_0_value, key_1_value, contexts, token_ids)
-    )
+    return uint32_to_uniform(output)
 
 
 def _philox_bits(
@@ -149,44 +147,9 @@ def _philox_bits(
     Bit ``i`` of the concatenated words is the ``i``-th layer's g-value, so
     one evaluation serves up to 128 layers.
     """
-    contexts = contexts.to(torch.int64) & _UINT32_MASK
-    prefix_shape = contexts.shape[:-1]
+    key_0, key_1, state = _philox_context_state(key_0_value, key_1_value, contexts)
     device = contexts.device
-    key_0 = torch.full(prefix_shape, key_0_value, dtype=torch.int64, device=device)
-    key_1 = torch.full(prefix_shape, key_1_value, dtype=torch.int64, device=device)
-    state = (
-        torch.full(prefix_shape, _CONTEXT_DOMAIN, dtype=torch.int64, device=device),
-        torch.full(
-            prefix_shape,
-            contexts.shape[-1],
-            dtype=torch.int64,
-            device=device,
-        ),
-        torch.zeros(prefix_shape, dtype=torch.int64, device=device),
-        torch.zeros(prefix_shape, dtype=torch.int64, device=device),
-    )
-
-    for offset in range(0, contexts.shape[-1], 4):
-        block = []
-        for index in range(4):
-            position = offset + index
-            if position < contexts.shape[-1]:
-                block.append(contexts[..., position])
-            else:
-                block.append(
-                    torch.full(
-                        prefix_shape,
-                        _UINT32_MASK - index,
-                        dtype=torch.int64,
-                        device=device,
-                    )
-                )
-        counter = tuple(
-            (state[index] ^ block[index]) & _UINT32_MASK for index in range(4)
-        )
-        state = _philox4x32_10(counter, ((key_0 ^ offset) & _UINT32_MASK, key_1))
-
-    output_shape = torch.broadcast_shapes(prefix_shape + (1,), token_ids.shape)
+    output_shape = torch.broadcast_shapes(contexts.shape[:-1] + (1,), token_ids.shape)
     tokens = torch.broadcast_to(token_ids.to(device=device), output_shape)
     state = tuple(
         torch.broadcast_to(word.unsqueeze(-1), output_shape) for word in state
@@ -209,7 +172,6 @@ def _philox_bits(
     return words[:num_words]
 
 
-_compiled_philox_uint32 = torch.compile(_philox_uint32, fullgraph=True, dynamic=True)
 _compiled_philox_uniform = torch.compile(_philox_uniform, fullgraph=True, dynamic=True)
 _compiled_philox_bits = torch.compile(_philox_bits, fullgraph=True, dynamic=True)
 
@@ -218,18 +180,12 @@ class PhiloxPRF(WatermarkPRF):
     """Accelerator-friendly Philox4x32-10 watermark PRF."""
 
     version = "philox4x32-10-v1"
+    supports_bits = True
 
     def __init__(self, key: int) -> None:
         if not 0 <= key <= 2**64 - 1:
             raise ValueError("Philox keys must fit in 64 bits")
         self.key = key
-
-    def uint32(self, contexts: torch.Tensor, token_ids: torch.Tensor) -> torch.Tensor:
-        """Raw uint32 outputs (held in int64) before the uniform mapping."""
-        key_words = self.key & _UINT32_MASK, self.key >> 32
-        if contexts.device.type == "cuda":
-            return _compiled_philox_uint32(*key_words, contexts, token_ids)
-        return _philox_uint32(*key_words, contexts, token_ids)
 
     def uniform(self, contexts: torch.Tensor, token_ids: torch.Tensor) -> torch.Tensor:
         key_words = self.key & _UINT32_MASK, self.key >> 32

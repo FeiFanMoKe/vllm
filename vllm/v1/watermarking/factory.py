@@ -22,12 +22,11 @@ def create_watermarker(config: WatermarkConfig) -> Watermarker:
         )
     if config.algorithm == "synthid":
         return SynthIDWatermarker(
-            config.key,
-            config.context_width,
-            config.synthid_depth,
-            config.prf,
-            config.synthid_strength,
-            config.synthid_max_probability,
-            config.synthid_context_history_size,
+            key=config.key,
+            context_width=config.context_width,
+            depth=config.synthid_depth,
+            prf=config.prf,
+            strength=config.synthid_strength,
+            max_probability=config.synthid_max_probability,
         )
     raise ValueError(f"Unknown watermarking algorithm: {config.algorithm}")

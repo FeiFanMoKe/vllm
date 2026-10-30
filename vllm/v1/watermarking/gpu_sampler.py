@@ -99,23 +99,29 @@ class GPUWatermarkSampler(Sampler):
                 watermarking &= ~repeated_contexts
             skip_mask = ~watermarking
 
+        support_bounds = None
+        if len(expanded_idx_mapping) == idx_mapping_np.shape[0]:
+            support_bounds = self._get_candidate_bounds(
+                top_k,
+                top_p,
+                idx_mapping_np,
+                enabled,
+                exact_support=HAS_TRITON and processed_logits.device.type != "cpu",
+            )
+
         random_sampler = RandomSampler(
             expanded_idx_mapping=expanded_idx_mapping,
             temperatures=self.sampling_states.temperature.gpu,
             seeds=self.sampling_states.seeds.gpu,
             positions=pos,
             use_fp64=self.use_fp64_gumbel,
-            candidate_bound=self._get_candidate_bound(
-                top_k,
-                idx_mapping_np,
-                exact_support=HAS_TRITON and processed_logits.device.type != "cpu",
-            ),
         )
         output = self.watermarker.sample(
             processed_logits,
             contexts,
             random_sampler,
             skip_mask=skip_mask,
+            support_bounds=support_bounds,
         )
         sampled = output.token_ids
         output_logits = output.logits
@@ -126,15 +132,37 @@ class GPUWatermarkSampler(Sampler):
         )
         return sampled, output_logits
 
-    def _get_candidate_bound(
+    def _get_candidate_bounds(
         self,
         top_k: torch.Tensor | None,
+        top_p: torch.Tensor | None,
         idx_mapping_np: np.ndarray,
+        enabled: np.ndarray,
         exact_support: bool,
-    ) -> int | None:
-        if top_k is None or not exact_support:
-            return None
-        return int(self.sampling_states.top_k.np[idx_mapping_np].max())
+    ) -> np.ndarray:
+        """Return per-row support bounds: -1 skip, 0 exact, positive upper bound.
+
+        TODO: the top-k bound assumes ``apply_top_k_top_p`` keeps at most
+        ``top_k`` tokens. Its all-equal-logits fallback keeps more, so this
+        path can understate the support. Fix by making top-k exact, exposing
+        the realized support, or falling back to the exact count.
+        """
+        bounds = np.full(idx_mapping_np.shape[0], -1, dtype=np.intp)
+        active = enabled & (idx_mapping_np >= 0)
+        if top_k is not None and exact_support:
+            bounds[active] = self.sampling_states.top_k.np[idx_mapping_np[active]]
+            return bounds
+        if (
+            top_k is None
+            and top_p is None
+            and not np.any(self.sampling_states.min_p.np[idx_mapping_np])
+        ):
+            # No truncation: the full vocabulary is the exact support, so the
+            # bound can be used without a device-to-host synchronization.
+            bounds[active] = self.sampling_states.vocab_size
+            return bounds
+        bounds[active] = 0
+        return bounds
 
     def _get_repeated_contexts(
         self,
@@ -143,11 +171,6 @@ class GPUWatermarkSampler(Sampler):
         expanded_local_pos: torch.Tensor | None = None,
     ) -> torch.Tensor:
         max_history = self.deduplicate_contexts_max_history
-        dedup_history_size = getattr(
-            getattr(self, "watermarker", None), "dedup_history_size", None
-        )
-        if dedup_history_size is not None:
-            max_history = dedup_history_size
         repeated = repeated_context_mask(
             self.req_states.all_token_ids.gpu,
             expanded_idx_mapping,

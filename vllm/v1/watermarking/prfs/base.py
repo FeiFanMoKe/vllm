@@ -9,6 +9,8 @@ _UINT32_MASK = 2**32 - 1
 
 
 class WatermarkPRF(ABC):
+    supports_bits: bool = False
+
     @abstractmethod
     def uniform(self, contexts: torch.Tensor, token_ids: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError

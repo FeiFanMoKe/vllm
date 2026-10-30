@@ -30,7 +30,7 @@ from vllm.v1.watermarking import (
 )
 from vllm.v1.worker.gpu.sample.watermark import repeated_context_mask
 
-GOLDEN_SCHEMA_VERSION = 6
+GOLDEN_SCHEMA_VERSION = 7
 
 # JSON floats round-trip exactly, but libm differs by an ULP across builds.
 GOLDEN_FLOAT_RTOL = 1e-9
@@ -47,7 +47,6 @@ WATERMARK_CONFIG_FIELDS = (
     "synthid_depth",
     "synthid_strength",
     "synthid_max_probability",
-    "synthid_context_history_size",
     "context_width",
     "deduplicate_contexts",
     "deduplicate_contexts_max_history",
@@ -103,7 +102,6 @@ class WatermarkingSchemeConfig:
     synthid_depth: int = 30
     synthid_strength: float = 1.0
     synthid_max_probability: float = 1.0
-    synthid_context_history_size: int = 1024
     generation_deduplicate_contexts: WatermarkContextScope = "single_turn"
     generation_deduplicate_contexts_max_history: int | None = 8192
     detection_deduplicate_contexts: bool = True
@@ -186,7 +184,9 @@ def _create_synthid_detector(
         p_value_threshold=config.p_value_threshold,
         prf=prf,
         deduplicate_contexts=config.detection_deduplicate_contexts,
-        context_history_size=config.synthid_context_history_size,
+        deduplicate_contexts_max_history=(
+            config.generation_deduplicate_contexts_max_history
+        ),
     )
 
 
@@ -221,9 +221,6 @@ class WatermarkingCandidate:
                 "synthid_strength": self.scheme_config.synthid_strength,
                 "synthid_max_probability": (
                     self.scheme_config.synthid_max_probability
-                ),
-                "synthid_context_history_size": (
-                    self.scheme_config.synthid_context_history_size
                 ),
                 "generation_deduplicate_contexts": (
                     self.scheme_config.generation_deduplicate_contexts
@@ -281,6 +278,9 @@ class WatermarkingCandidate:
                 "context_width": detector.context_width,
                 "p_value_threshold": detector.p_value_threshold,
                 "deduplicate_contexts": detector.deduplicate_contexts,
+                "deduplicate_contexts_max_history": getattr(
+                    detector, "deduplicate_contexts_max_history", None
+                ),
                 "alpha": getattr(detector, "alpha", None),
                 "depth": getattr(detector, "depth", None),
                 "prf_key": None if prf is None else str(prf.key),
@@ -373,9 +373,6 @@ class WatermarkingCandidate:
             synthid_depth=self.scheme_config.synthid_depth,
             synthid_strength=self.scheme_config.synthid_strength,
             synthid_max_probability=self.scheme_config.synthid_max_probability,
-            synthid_context_history_size=(
-                self.scheme_config.synthid_context_history_size
-            ),
             context_width=self.scheme_config.context_width,
             deduplicate_contexts=(self.scheme_config.generation_deduplicate_contexts),
             deduplicate_contexts_max_history=(
@@ -414,18 +411,13 @@ class WatermarkingCandidate:
             storage[0, prompt_len : prompt_len + len(generated)] = torch.tensor(
                 generated
             )
-        max_history = (
-            self.scheme_config.synthid_context_history_size
-            if self.scheme == "synthid"
-            else self.scheme_config.generation_deduplicate_contexts_max_history
-        )
         return repeated_context_mask(
             storage,
             torch.tensor([0]),
             torch.tensor([prompt_len]),
             torch.tensor([prompt_len + len(generated)]),
             context,
-            max_history,
+            self.scheme_config.generation_deduplicate_contexts_max_history,
             include_prompt=scope == "all",
             skip_partial_context=scope == "all",
         )
@@ -488,7 +480,6 @@ def _candidate(
     synthid_depth: int = 30,
     synthid_strength: float = 1.0,
     synthid_max_probability: float = 1.0,
-    synthid_context_history_size: int = 1024,
     generation_deduplicate_contexts: WatermarkContextScope = "single_turn",
     generation_deduplicate_contexts_max_history: int | None = 8192,
     detection_deduplicate_contexts: bool = True,
@@ -507,7 +498,6 @@ def _candidate(
             synthid_depth=synthid_depth,
             synthid_strength=synthid_strength,
             synthid_max_probability=synthid_max_probability,
-            synthid_context_history_size=synthid_context_history_size,
             generation_deduplicate_contexts=generation_deduplicate_contexts,
             generation_deduplicate_contexts_max_history=(
                 generation_deduplicate_contexts_max_history
@@ -692,13 +682,20 @@ WATERMARKING_CANDIDATES = (
         generation_deduplicate_contexts="all",
         fixture=REPETITIVE_FIXTURE,
     ),
-    _candidate("synthid-philox-key42-cw4", "synthid", 42, prf="philox"),
+    _candidate(
+        "synthid-philox-key42-cw4",
+        "synthid",
+        42,
+        prf="philox",
+        generation_deduplicate_contexts_max_history=1024,
+    ),
     _candidate(
         "synthid-philox-key42-cw4-wrong-key",
         "synthid",
         42,
         prf="philox",
         detection_key=43,
+        generation_deduplicate_contexts_max_history=1024,
     ),
     _candidate(
         "synthid-philox-key7-cw4-depth8",
@@ -706,6 +703,7 @@ WATERMARKING_CANDIDATES = (
         7,
         prf="philox",
         synthid_depth=8,
+        generation_deduplicate_contexts_max_history=1024,
     ),
     _candidate(
         "synthid-philox-key7-cw4-depth64",
@@ -713,6 +711,7 @@ WATERMARKING_CANDIDATES = (
         7,
         prf="philox",
         synthid_depth=64,
+        generation_deduplicate_contexts_max_history=1024,
     ),
     _candidate(
         "synthid-philox-key7-cw4-depth100",
@@ -720,6 +719,7 @@ WATERMARKING_CANDIDATES = (
         7,
         prf="philox",
         synthid_depth=100,
+        generation_deduplicate_contexts_max_history=1024,
     ),
     _candidate(
         "synthid-philox-key42-cw4-strength0.5",
@@ -727,6 +727,7 @@ WATERMARKING_CANDIDATES = (
         42,
         prf="philox",
         synthid_strength=0.5,
+        generation_deduplicate_contexts_max_history=1024,
     ),
     _candidate(
         "synthid-philox-key7-cw4-gate0.5",
@@ -734,6 +735,7 @@ WATERMARKING_CANDIDATES = (
         7,
         prf="philox",
         synthid_max_probability=0.5,
+        generation_deduplicate_contexts_max_history=1024,
         fixture=GATED_FIXTURE,
     ),
     _candidate(
@@ -742,6 +744,7 @@ WATERMARKING_CANDIDATES = (
         42,
         prf="philox",
         generation_deduplicate_contexts="all",
+        generation_deduplicate_contexts_max_history=1024,
     ),
 )
 

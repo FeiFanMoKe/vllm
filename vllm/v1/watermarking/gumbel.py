@@ -4,8 +4,8 @@
 """Gumbel-max watermark generation and detection primitives."""
 
 import math
-import warnings
 
+import numpy as np
 import torch
 
 from vllm.config.watermarking import WatermarkPRFName, derive_watermark_key
@@ -13,6 +13,7 @@ from vllm.v1.watermarking.detector import (
     WatermarkDetector,
 )
 from vllm.v1.watermarking.prfs import PhiloxPRF, WatermarkPRF, create_prf
+from vllm.v1.watermarking.validation import validate_context_width
 from vllm.v1.watermarking.watermarker import (
     RandomSampler,
     SupportsSpeculativeDecoding,
@@ -47,7 +48,7 @@ class GumbelWatermarker(Watermarker):
         prf: WatermarkPRF | WatermarkPRFName = "philox",
     ) -> None:
         prf = create_prf(prf, key) if isinstance(prf, str) else prf
-        _validate_context_width(context_width)
+        validate_context_width(context_width)
         self.prf = prf
         self._context_width = context_width
 
@@ -144,23 +145,24 @@ class DualKeyGumbelWatermarker(Watermarker, SupportsSpeculativeDecoding):
         contexts: torch.Tensor,
         random_sampler: RandomSampler | None = None,
         skip_mask: torch.Tensor | None = None,
+        support_bounds: np.ndarray | None = None,
     ) -> WatermarkSample:
         if self.alpha == 0:
             return self.draft_watermarker.sample(
-                logits, contexts, random_sampler, skip_mask
+                logits, contexts, random_sampler, skip_mask, support_bounds
             )
         if self.alpha == 1:
             return self.target_watermarker.sample(
-                logits, contexts, random_sampler, skip_mask
+                logits, contexts, random_sampler, skip_mask, support_bounds
             )
         if random_sampler is None:
             raise ValueError("dual-key Gumbel routing requires a random sampler")
 
         key_a_sample = self.draft_watermarker.sample(
-            logits, contexts, random_sampler, skip_mask
+            logits, contexts, random_sampler, skip_mask, support_bounds
         )
         key_b_sample = self.target_watermarker.sample(
-            logits, contexts, random_sampler, skip_mask
+            logits, contexts, random_sampler, skip_mask, support_bounds
         )
         routing_logits = self._routing_logits(logits.device).expand(logits.shape[0], -1)
         use_key_a = random_sampler(routing_logits) == 0
@@ -191,7 +193,7 @@ class GumbelWatermarkDetector(WatermarkDetector):
         deduplicate_contexts: bool = True,
     ) -> None:
         prf = create_prf(prf, key) if isinstance(prf, str) else prf
-        _validate_context_width(context_width)
+        validate_context_width(context_width)
         super().__init__(context_width, p_value_threshold, deduplicate_contexts)
         self.prf = prf
 
@@ -261,14 +263,3 @@ class DualKeyGumbelWatermarkDetector(GumbelWatermarkDetector):
         shape = torch.tensor(num_scored_tokens / variance, dtype=torch.float64)
         scaled_score = torch.tensor(score / variance, dtype=torch.float64)
         return torch.special.gammaincc(shape, scaled_score).item()
-
-
-def _validate_context_width(context_width: int) -> None:
-    if context_width < 1:
-        raise ValueError("context_width must be positive")
-    if context_width > 16:
-        warnings.warn(
-            "context_width values greater than 16 reduce robustness to edits because "
-            "each changed token affects more subsequent watermark contexts",
-            stacklevel=3,
-        )

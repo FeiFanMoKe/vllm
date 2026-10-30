@@ -1316,7 +1316,9 @@ class VllmConfig:
                 raise ValueError(
                     "SynthID watermarking does not support speculative "
                     "decoding, including target-only watermarking. Disable "
-                    "speculative decoding or use the 'gumbel' algorithm."
+                    "speculative decoding, use the 'dual_key_gumbel' "
+                    "algorithm, or use 'gumbel' with "
+                    "allow_target_only_watermarking=true."
                 )
             if (
                 not watermark_config.allow_target_only_watermarking

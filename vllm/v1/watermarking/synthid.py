@@ -19,11 +19,17 @@ import math
 from collections import deque
 from dataclasses import replace
 
+import numpy as np
 import torch
 
-from vllm.config.watermarking import WatermarkPRFName, derive_watermark_key
+from vllm.config.watermarking import (
+    WatermarkConfig,
+    WatermarkPRFName,
+    derive_watermark_key,
+)
 from vllm.v1.watermarking.detector import WatermarkDetection, WatermarkDetector
 from vllm.v1.watermarking.prfs import WatermarkPRF, create_prf
+from vllm.v1.watermarking.validation import validate_context_width
 from vllm.v1.watermarking.watermarker import (
     RandomSampler,
     Watermarker,
@@ -33,6 +39,7 @@ from vllm.v1.watermarking.watermarker import (
 _EXACT_BINOMIAL_MAX_N = 100_000
 _MAX_DEPTH = 128
 _FUSED_UPDATE_MAX_CANDIDATES = 4096
+_FULL_SUPPORT_ROW_CHUNK = 8
 
 
 class SynthIDWatermarker(Watermarker):
@@ -51,25 +58,24 @@ class SynthIDWatermarker(Watermarker):
         prf: WatermarkPRFName = "philox",
         strength: float = 1.0,
         max_probability: float = 1.0,
-        context_history_size: int = 1024,
     ) -> None:
-        if context_width < 1:
-            raise ValueError("context_width must be positive")
+        validate_context_width(context_width)
         if not 1 <= depth <= _MAX_DEPTH:
             raise ValueError(f"depth must be between 1 and {_MAX_DEPTH}")
         if not 0 < strength <= 1:
             raise ValueError("strength must be in (0, 1]")
         if not 0 < max_probability <= 1:
             raise ValueError("max_probability must be in (0, 1]")
-        if context_history_size < 1:
-            raise ValueError("context_history_size must be positive")
         self.prf = create_prf(prf, derive_watermark_key(key, b"synthid"))
+        if not self.prf.supports_bits:
+            raise ValueError(
+                f"{type(self.prf).__name__} does not provide packed g-value bits"
+            )
         self.depth = depth
         self.strength = strength
         self.max_probability = max_probability
         self._context_width = context_width
         self._num_words = (depth + 31) // 32
-        self.dedup_history_size = context_history_size
 
     @property
     def context_width(self) -> int:
@@ -86,9 +92,11 @@ class SynthIDWatermarker(Watermarker):
         Only tokens with finite logits are candidates: the update is exact
         over the post top-k/top-p support, and every other token stays at
         ``-inf``. One PRF evaluation serves all layers, so the support size
-        controls the per-step cost. ``candidate_bound`` is a guaranteed upper
-        bound on that support; without it, the exact size requires a device
-        synchronization.
+        controls the per-step cost. ``candidate_bound`` is an upper bound on
+        that support; without it, the exact size requires a device
+        synchronization. The bound assumes top-k kept at most ``top_k`` tokens,
+        which degenerate rows with all-equal finite logits violate (see the
+        no-mask fallback in ``topk_topp_triton``).
         """
         logits = logits.to(torch.float32)
         if candidate_bound is None:
@@ -125,9 +133,43 @@ class SynthIDWatermarker(Watermarker):
             out = out.scatter(-1, indices, logp)
         return out
 
+    def _transform_batch(
+        self,
+        logits: torch.Tensor,
+        contexts: torch.Tensor,
+        support_bounds: np.ndarray,
+    ) -> torch.Tensor:
+        """Apply the update row-group by row-group.
+
+        ``support_bounds`` holds one entry per row: ``-1`` leaves the row
+        unchanged, ``0`` uses the exact support count, and a positive value is
+        an upper bound.
+        """
+        values = np.unique(support_bounds)
+        if values.size == 1 and 0 < values[0] < logits.shape[-1]:
+            return self._transform_logits(logits, contexts, int(values[0]))
+
+        out = logits.to(torch.float32).clone()
+        for value in values:
+            if value < 0:
+                continue
+            rows = np.flatnonzero(support_bounds == value)
+            index = torch.from_numpy(rows).to(device=logits.device, dtype=torch.int64)
+            bound = None if value == 0 else int(value)
+            full_support = bound is not None and bound >= logits.shape[-1]
+            chunk_size = _FULL_SUPPORT_ROW_CHUNK if full_support else len(rows)
+            for start in range(0, len(rows), chunk_size):
+                chunk = index[start : start + chunk_size]
+                out[chunk] = self._transform_logits(
+                    logits[chunk], contexts[chunk], bound
+                )
+        return out
+
     def _apply_expected_g_update(
         self, logp: torch.Tensor, words: tuple[torch.Tensor, ...]
     ) -> torch.Tensor:
+        # TODO: the eager and Triton paths round g_mass differently at the
+        # clamp boundary, so near-degenerate rows can differ across devices.
         if (
             logp.device.type == "cuda"
             and self._num_words == 1
@@ -152,13 +194,20 @@ class SynthIDWatermarker(Watermarker):
         logits: torch.Tensor,
         contexts: torch.Tensor,
         skip_mask: torch.Tensor | None,
-        candidate_bound: int | None = None,
+        support_bounds: np.ndarray | None = None,
     ) -> torch.Tensor:
-        transformed = self._transform_logits(logits, contexts, candidate_bound)
+        if support_bounds is None:
+            transformed = self._transform_logits(logits, contexts)
+        else:
+            transformed = self._transform_batch(logits, contexts, support_bounds)
         skip = (contexts < 0).any(dim=-1)
         if skip_mask is not None:
             skip = skip | skip_mask
         if self.max_probability < 1.0:
+            # TODO: reuse the pre-update log-probs from the transform instead
+            # of a second full-vocabulary softmax. Skipping the transform for
+            # gated rows needs row compaction (which synchronizes) or a
+            # device-side kernel.
             max_prob = logits.to(torch.float32).softmax(dim=-1).amax(dim=-1)
             skip = skip | (max_prob > self.max_probability)
         return torch.where(skip.unsqueeze(-1), logits, transformed)
@@ -169,25 +218,31 @@ class SynthIDWatermarker(Watermarker):
         contexts: torch.Tensor,
         random_sampler: RandomSampler | None = None,
         skip_mask: torch.Tensor | None = None,
+        support_bounds: np.ndarray | None = None,
     ) -> WatermarkSample:
+        """Sample from the SynthID-adjusted distribution.
+
+        The returned logits are the input processed logits, as for Gumbel-max,
+        so processed-logit/logprob modes do not expose the key-dependent
+        adjustment.
+        """
         if random_sampler is None:
-            return self._sample_watermarked(logits, contexts)
-        candidate_bound = getattr(random_sampler, "candidate_bound", None)
-        transformed = self._mixed_logits(
-            logits, contexts, skip_mask, candidate_bound
-        )
-        return WatermarkSample(random_sampler(transformed), transformed)
+            return self._sample_watermarked(logits, contexts, skip_mask, support_bounds)
+        transformed = self._mixed_logits(logits, contexts, skip_mask, support_bounds)
+        return WatermarkSample(random_sampler(transformed), logits)
 
     def _sample_watermarked(
         self,
         logits: torch.Tensor,
         contexts: torch.Tensor,
+        skip_mask: torch.Tensor | None = None,
+        support_bounds: np.ndarray | None = None,
     ) -> WatermarkSample:
-        transformed = self._mixed_logits(logits, contexts, None)
+        transformed = self._mixed_logits(logits, contexts, skip_mask, support_bounds)
         token_ids = torch.multinomial(
             torch.softmax(transformed, dim=-1), num_samples=1
         ).squeeze(-1)
-        return WatermarkSample(token_ids, transformed)
+        return WatermarkSample(token_ids, logits)
 
 
 class SynthIDWatermarkDetector(WatermarkDetector):
@@ -198,6 +253,10 @@ class SynthIDWatermarkDetector(WatermarkDetector):
     Binomial(num_scored_tokens * depth, 0.5) distribution. The first
     `context_width` tokens are not scored because their context is
     incomplete; pass only the generated tokens, not the prompt.
+
+    ``detect`` keeps per-call statistics on the instance, so one detector must
+    not serve concurrent calls. TODO: return the statistics from
+    ``_prepare_inputs`` instead, and window ``seen_pairs`` for long documents.
     """
 
     skip_partial_contexts = True
@@ -210,21 +269,56 @@ class SynthIDWatermarkDetector(WatermarkDetector):
         p_value_threshold: float = 0.01,
         prf: WatermarkPRFName = "philox",
         deduplicate_contexts: bool = True,
-        context_history_size: int | None = 1024,
+        deduplicate_contexts_max_history: int | None = 1024,
         eos_token_id: int | None = None,
     ) -> None:
+        validate_context_width(context_width)
         if not 1 <= depth <= _MAX_DEPTH:
             raise ValueError(f"depth must be between 1 and {_MAX_DEPTH}")
-        if context_history_size is not None and context_history_size < 1:
-            raise ValueError("context_history_size must be positive or None")
+        if (
+            deduplicate_contexts_max_history is not None
+            and deduplicate_contexts_max_history < 1
+        ):
+            raise ValueError(
+                "deduplicate_contexts_max_history must be positive or None"
+            )
         super().__init__(context_width, p_value_threshold, deduplicate_contexts)
         self.prf: WatermarkPRF = create_prf(prf, derive_watermark_key(key, b"synthid"))
+        if not self.prf.supports_bits:
+            raise ValueError(
+                f"{type(self.prf).__name__} does not provide packed g-value bits"
+            )
         self.depth = depth
         self._num_words = (depth + 31) // 32
-        self.context_history_size = context_history_size
+        self.deduplicate_contexts_max_history = deduplicate_contexts_max_history
         self.eos_token_id = eos_token_id
         self._repeated_contexts = 0
         self._duplicate_context_tokens = 0
+
+    @classmethod
+    def from_config(
+        cls,
+        config: WatermarkConfig,
+        *,
+        p_value_threshold: float = 0.01,
+        deduplicate_contexts: bool = True,
+        eos_token_id: int | None = None,
+    ) -> "SynthIDWatermarkDetector":
+        """Build a detector whose SynthID parameters match ``config``.
+
+        ``deduplicate_contexts`` controls scoring independence and is unrelated
+        to the generation-side ``config.deduplicate_contexts`` scope.
+        """
+        return cls(
+            key=config.key,
+            context_width=config.context_width,
+            depth=config.synthid_depth,
+            p_value_threshold=p_value_threshold,
+            prf=config.prf,
+            deduplicate_contexts=deduplicate_contexts,
+            deduplicate_contexts_max_history=config.deduplicate_contexts_max_history,
+            eos_token_id=eos_token_id,
+        )
 
     def _prepare_inputs(
         self, token_ids: list[int]
@@ -247,8 +341,8 @@ class SynthIDWatermarkDetector(WatermarkDetector):
             if self.deduplicate_contexts:
                 is_repeated = context in history_counts
                 if (
-                    self.context_history_size is not None
-                    and len(history) == self.context_history_size
+                    self.deduplicate_contexts_max_history is not None
+                    and len(history) == self.deduplicate_contexts_max_history
                 ):
                     evicted = history.popleft()
                     remaining = history_counts[evicted] - 1
@@ -297,31 +391,34 @@ class SynthIDWatermarkDetector(WatermarkDetector):
     def _aggregate_scores(self, token_scores: torch.Tensor) -> float:
         return token_scores.sum().item()
 
+    def _get_statistics(
+        self, score: float, num_scored_tokens: int
+    ) -> tuple[float, float | None]:
+        trials = num_scored_tokens * self.depth
+        if trials == 0:
+            return 1.0, 0.0
+        k = min(int(score), trials)
+        if trials <= _EXACT_BINOMIAL_MAX_N:
+            log_p = _binomial_log_survival(k, trials)
+        else:
+            z = (score - 0.5 - trials / 2) / math.sqrt(trials / 4)
+            log_p = _normal_log_survival(z)
+        return math.exp(log_p), log_p
+
     def _get_p_value(self, score: float, num_scored_tokens: int) -> float:
-        n = num_scored_tokens * self.depth
-        k = min(int(score), n)
-        if n <= _EXACT_BINOMIAL_MAX_N:
-            return _binomial_survival(k, n)
-        z = (score - 0.5 - n / 2) / math.sqrt(n / 4)
-        return 0.5 * math.erfc(z / math.sqrt(2))
+        return self._get_statistics(score, num_scored_tokens)[0]
 
     def detect(self, token_ids: list[int]) -> WatermarkDetection:
         result = super().detect(token_ids)
         trials = result.num_scored_tokens * self.depth
-        if trials == 0:
-            log_p = 0.0
-            z = 0.0
-        else:
-            z = (result.score - trials / 2) / math.sqrt(trials / 4)
-            if trials <= _EXACT_BINOMIAL_MAX_N:
-                log_p = _binomial_log_survival(min(int(result.score), trials), trials)
-            else:
-                log_p = _normal_log_survival(
-                    (result.score - 0.5 - trials / 2) / math.sqrt(trials / 4)
-                )
+        z = (
+            0.0
+            if trials == 0
+            else (result.score - trials / 2) / math.sqrt(trials / 4)
+        )
         return replace(
             result,
-            log_p_value=log_p,
+            log_p_value=0.0 if trials == 0 else result.log_p_value,
             z_score=z,
             repeated_contexts=self._repeated_contexts,
             duplicate_context_tokens=self._duplicate_context_tokens,
@@ -329,26 +426,8 @@ class SynthIDWatermarkDetector(WatermarkDetector):
 
 
 def _binomial_survival(k: int, n: int) -> float:
-    """Return P(X >= k) for X ~ Binomial(n, 0.5), computed in log space."""
-    if k <= 0:
-        return 1.0
-    if k > n:
-        return 0.0
-    log_2_pow_n = n * math.log(2)
-
-    def log_pmf(i: int) -> float:
-        return (
-            math.lgamma(n + 1)
-            - math.lgamma(i + 1)
-            - math.lgamma(n - i + 1)
-            - log_2_pow_n
-        )
-
-    log_terms = [log_pmf(k)]
-    for i in range(k + 1, n + 1):
-        log_terms.append(log_terms[-1] + math.log(n - i + 1) - math.log(i))
-    max_log = max(log_terms)
-    return min(1.0, math.exp(max_log) * sum(math.exp(t - max_log) for t in log_terms))
+    """Return P(X >= k) for X ~ Binomial(n, 0.5)."""
+    return math.exp(_binomial_log_survival(k, n))
 
 
 def _binomial_log_survival(count: int, trials: int) -> float:

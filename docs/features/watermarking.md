@@ -245,15 +245,19 @@ vllm serve MODEL \
 `synthid_depth` defaults to 30 and must not exceed 128, the number of bits one
 PRF evaluation provides. Larger values strengthen the watermark and improve
 robustness to edits at roughly linear cost; smaller values reduce overhead.
-`context_width` defaults to 4 and must match between generation and detection;
-the reference implementation's `ngram_len=5` corresponds to a four-token
-context plus the target token.
+Updates use a fused Triton kernel for `synthid_depth <= 32` and at most 4096
+candidates; larger depths or candidate sets fall back to a slower per-layer
+loop. `context_width` defaults to 4 and must match between generation and
+detection; the reference implementation's `ngram_len=5` corresponds to a
+four-token context plus the target token.
 
 Only tokens with finite logits after top-k/top-p are watermarked, and the
 update is exact over that support, matching the reference implementation's
 candidate set. Per-step cost grows with the support size, so set `top_k` (for
 example 50, as in the reference examples) to bound it; without top-k/top-p the
-full vocabulary is processed on every step. There is no separate candidate cap.
+full vocabulary is processed on every step and allocates large temporary
+tensors. There is no separate candidate cap: adding one would truncate the
+sampling distribution.
 
 `synthid_strength` defaults to 1.0 and scales each layer's log-bias. Values
 below 1 reduce per-step distortion at the cost of detection power; 1.0 is the
@@ -263,6 +267,10 @@ token probability exceeds the threshold, so low-entropy steps use ordinary
 sampling. Skipped steps only dilute detection. Neither setting changes
 detection: the detector counts raw g-values.
 
+With `--logprobs-mode processed_logits` or `processed_logprobs`, SynthID
+reports the pre-watermark processed distribution, as Gumbel-max does, so the
+returned logprobs do not expose the key-dependent adjustment.
+
 The first `context_width` generated tokens have an incomplete context and are
 not watermarked; detection skips them as well. Pass only the generated tokens
 to the detector, not the prompt, so that detection contexts match the contexts
@@ -271,10 +279,10 @@ skips contexts found in the prompt; the detector cannot reproduce that check
 from generated tokens alone and counts those unwatermarked tokens, which
 reduces detection power.
 
-`synthid_context_history_size` defaults to 1024 and must match between
-generation and detection. A context repeated within that many recent contexts
-is not reweighted; the detector applies the same window and scores each
-distinct `(context, token)` pair once.
+`deduplicate_contexts_max_history` defaults to 1024 for SynthID-Text and must
+match between generation and detection. A context repeated within that many
+recent contexts is not reweighted; the detector applies the same window and
+scores each distinct `(context, token)` pair once.
 
 Like Gumbel-max, SynthID-Text requires stochastic sampling: greedy requests
 (`temperature=0`) and `top_k=1` requests bypass watermarking. SynthID does not
@@ -283,18 +291,24 @@ rejects that combination.
 
 Detection counts the g=1 votes over all scored tokens and layers and derives a
 p-value from the binomial null distribution. `log_p_value` avoids underflow on
-long texts, `z_score` is the standardized count, and
+long texts, `z_score` is the standardized count (the normal approximation for
+`p_value`/`log_p_value` applies a 0.5 continuity correction), and
 `repeated_contexts`/`duplicate_context_tokens` report positions skipped by the
 repetition window and the pair dedup. Pass `eos_token_id` to stop at the first
 EOS.
 
 ```python
+from vllm.config.watermarking import WatermarkConfig
 from vllm.v1.watermarking import SynthIDWatermarkDetector
 
-detector = SynthIDWatermarkDetector(key=42, context_history_size=1024)
+config = WatermarkConfig(algorithm="synthid", key=42)
+detector = SynthIDWatermarkDetector.from_config(config)
 result = detector.detect(generated_token_ids)
 print(result.p_value, result.log_p_value, result.z_score, result.is_watermarked)
 ```
+
+`from_config` copies the depth, context width, and deduplication window from
+the generation configuration, so they cannot drift.
 
 The watermark keys and PRF differ from Google DeepMind's reference
 implementation, so texts watermarked by that implementation (or by Gemini)

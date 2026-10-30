@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+import numpy as np
 import torch
 
 from vllm.v1.worker.gpu.sample.gumbel import gumbel_sample
@@ -24,7 +25,6 @@ class RandomSampler:
     positions: torch.Tensor
     use_fp64: bool = False
     is_drafting: bool = False
-    candidate_bound: int | None = None
     logits_cache: torch.Tensor | None = None
     logits_cache_col: torch.Tensor | None = None
     logits_cache_source: torch.Tensor | None = None
@@ -46,8 +46,6 @@ class RandomSampler:
 
 
 class Watermarker(ABC):
-    dedup_history_size: int | None = None
-
     @property
     @abstractmethod
     def context_width(self) -> int:
@@ -59,6 +57,7 @@ class Watermarker(ABC):
         contexts: torch.Tensor,
         random_sampler: RandomSampler | None = None,
         skip_mask: torch.Tensor | None = None,
+        support_bounds: np.ndarray | None = None,
     ) -> WatermarkSample:
         if skip_mask is not None:
             if random_sampler is None:
