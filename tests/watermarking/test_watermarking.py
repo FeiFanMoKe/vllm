@@ -421,6 +421,19 @@ def test_gpu_sampler_filters_top_k_top_p_before_watermarking(
     assert sampled.item() in (0, 1)
 
 
+def test_gpu_sampler_candidate_bound_uses_cpu_top_k_state():
+    sampler = object.__new__(GPUWatermarkSampler)
+    sampler.sampling_states = SimpleNamespace(
+        top_k=SimpleNamespace(np=np.array([20, 50], dtype=np.int32))
+    )
+    top_k = torch.tensor([20, 50])
+    rows = np.array([0, 1])
+
+    assert sampler._get_candidate_bound(top_k, rows, exact_support=True) == 50
+    assert sampler._get_candidate_bound(top_k, rows, exact_support=False) is None
+    assert sampler._get_candidate_bound(None, rows, exact_support=True) is None
+
+
 def test_watermark_context_ignores_prefix_cache_bookkeeping():
     sampler = object.__new__(GPUWatermarkSampler)
     sampler.watermarker = SimpleNamespace(context_width=3)

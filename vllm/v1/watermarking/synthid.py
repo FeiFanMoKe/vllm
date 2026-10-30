@@ -79,17 +79,25 @@ class SynthIDWatermarker(Watermarker):
         self,
         logits: torch.Tensor,
         contexts: torch.Tensor,
+        candidate_bound: int | None = None,
     ) -> torch.Tensor:
         """Apply the per-layer expected-g-value update to the logits.
 
         Only tokens with finite logits are candidates: the update is exact
         over the post top-k/top-p support, and every other token stays at
         ``-inf``. One PRF evaluation serves all layers, so the support size
-        controls the per-step cost.
+        controls the per-step cost. ``candidate_bound`` is a guaranteed upper
+        bound on that support; without it, the exact size requires a device
+        synchronization.
         """
         logits = logits.to(torch.float32)
-        finite_counts = torch.isfinite(logits).sum(dim=-1)
-        num_candidates = int(finite_counts.max())
+        if candidate_bound is None:
+            finite_counts = torch.isfinite(logits).sum(dim=-1)
+            num_candidates = int(finite_counts.max())
+        else:
+            if candidate_bound < 1:
+                raise ValueError("candidate_bound must be positive")
+            num_candidates = min(candidate_bound, logits.shape[-1])
         if num_candidates == 0:
             return logits
 
@@ -144,8 +152,9 @@ class SynthIDWatermarker(Watermarker):
         logits: torch.Tensor,
         contexts: torch.Tensor,
         skip_mask: torch.Tensor | None,
+        candidate_bound: int | None = None,
     ) -> torch.Tensor:
-        transformed = self._transform_logits(logits, contexts)
+        transformed = self._transform_logits(logits, contexts, candidate_bound)
         skip = (contexts < 0).any(dim=-1)
         if skip_mask is not None:
             skip = skip | skip_mask
@@ -163,7 +172,10 @@ class SynthIDWatermarker(Watermarker):
     ) -> WatermarkSample:
         if random_sampler is None:
             return self._sample_watermarked(logits, contexts)
-        transformed = self._mixed_logits(logits, contexts, skip_mask)
+        candidate_bound = getattr(random_sampler, "candidate_bound", None)
+        transformed = self._mixed_logits(
+            logits, contexts, skip_mask, candidate_bound
+        )
         return WatermarkSample(random_sampler(transformed), transformed)
 
     def _sample_watermarked(
