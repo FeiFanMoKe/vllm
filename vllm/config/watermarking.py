@@ -2,9 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 import hashlib
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
+from pydantic_core import ArgsKwargs
 from typing_extensions import Self
 
 from vllm.config.utils import config
@@ -20,6 +21,8 @@ _MIN_RECOMMENDED_DEDUP_HISTORY = 1024
 
 
 def derive_watermark_key(key: int, domain: bytes) -> int:
+    if not 0 <= key <= 2**64 - 1:
+        raise ValueError("Watermark keys must fit in 64 bits")
     digest = hashlib.sha256(domain + key.to_bytes(8, "big")).digest()
     return int.from_bytes(digest[:8], "big")
 
@@ -44,9 +47,6 @@ class WatermarkConfig:
     synthid_max_probability: float = Field(default=1.0, gt=0, le=1)
     """Skip watermarking a request step when its largest post-truncation
     token probability exceeds this value. 1.0 disables the gate."""
-    synthid_context_history_size: int = Field(default=1024, ge=1)
-    """Number of recent generated contexts SynthID searches for repeats.
-    Must match the detector's `context_history_size`."""
     context_width: int = Field(default=4, ge=1)
     """Number of prior tokens used by the watermark PRF."""
     deduplicate_contexts: WatermarkContextScope = "single_turn"
@@ -56,10 +56,11 @@ class WatermarkConfig:
     generated tokens. `all` also searches the prompt and samples the first
     `context_width` generated tokens without watermarking."""
     deduplicate_contexts_max_history: int | None = Field(default=8192, ge=1)
-    """Number of most recent history positions searched (default 8192), or
-    `None` for the whole scope. Each position is compared over the
+    """Number of most recent history positions searched, or `None` for the
+    whole scope. Defaults to 8192, and to 1024 for SynthID-Text, where the
+    detector must use the same value. Each position is compared over the
     `context_width` tokens before it. Ignored when `deduplicate_contexts` is
-    `none`. SynthID-Text uses `synthid_context_history_size` instead."""
+    `none`."""
     prf: WatermarkPRFName = "philox"
     """Pseudorandom function used by the watermarking algorithm."""
     allow_target_only_watermarking: bool = False
@@ -69,6 +70,21 @@ class WatermarkConfig:
     def supports_speculative_decoding(self) -> bool:
         return self.algorithm == "dual_key_gumbel"
 
+    @model_validator(mode="before")
+    @classmethod
+    def default_synthid_dedup_history(cls, data: Any) -> Any:
+        values = data.kwargs if isinstance(data, ArgsKwargs) else data
+        if (
+            isinstance(values, dict)
+            and values.get("algorithm") == "synthid"
+            and "deduplicate_contexts_max_history" not in values
+        ):
+            values = {**values, "deduplicate_contexts_max_history": 1024}
+            if isinstance(data, ArgsKwargs):
+                return ArgsKwargs(data.args, values)
+            return values
+        return data
+
     @model_validator(mode="after")
     def validate_watermark_settings(self) -> Self:
         if self.key > 2**64 - 1:
@@ -77,12 +93,10 @@ class WatermarkConfig:
             self.deduplicate_contexts_max_history is not None
             and self.deduplicate_contexts_max_history < _MIN_RECOMMENDED_DEDUP_HISTORY
         )
-        if self.algorithm in ("gumbel", "dual_key_gumbel") and (
-            self.deduplicate_contexts == "none" or history_is_too_short
-        ):
+        if self.deduplicate_contexts == "none" or history_is_too_short:
             logger.warning_once(
-                "Gumbel-max watermarking with context deduplication "
-                "disabled or limited to fewer than "
+                "Watermarking with context deduplication disabled or limited "
+                "to fewer than "
                 f"{_MIN_RECOMMENDED_DEDUP_HISTORY} positions may increase the "
                 "frequency of degenerate generations, including repetition loops. "
                 "Use deduplicate_contexts='single_turn' or 'all' with "

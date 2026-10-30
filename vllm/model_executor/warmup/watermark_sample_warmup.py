@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""Warm up the watermarked sampler's Triton kernel.
+"""Warm up the Gumbel watermarked sampler's Triton kernel.
 
 ``_philox_gumbel_kernel`` is JIT-compiled once per (key, logits dtype,
 skip-mask, ``USE_FP64``) specialization. The generic sampler warmup samples with
@@ -8,7 +8,10 @@ skip-mask, ``USE_FP64``) specialization. The generic sampler warmup samples with
 forces the fp32 copy in ``apply_sampling_params``, so the first ordinary
 temperature-1.0 request is the first launch with model-dtype logits and pays
 the compilation inside inference. This pre-compiles every specialization the
-sampler path can launch for the configured watermark.
+sampler path can launch for the configured Gumbel watermark.
+
+TODO: warm SynthID's ``bits`` (rank-1 and rank-2 graphs) and
+``synthid_update`` (per ``BLOCK_C`` bucket) specializations too.
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ _NUM_WARMUP_TOKENS = 1
 
 
 def _philox_key(watermarker: Watermarker) -> int | None:
-    """None when the watermarker takes the torch path and compiles no kernel."""
+    """Return the launch key, or None for algorithms warmed elsewhere."""
     from vllm.v1.watermarking.gumbel import GumbelWatermarker
     from vllm.v1.watermarking.prfs import PhiloxPRF
 

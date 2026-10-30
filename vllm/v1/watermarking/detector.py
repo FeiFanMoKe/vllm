@@ -23,8 +23,6 @@ class WatermarkDetection:
 
 
 class WatermarkDetector(ABC):
-    skip_partial_contexts: bool = False
-
     def __init__(
         self,
         context_width: int,
@@ -47,12 +45,13 @@ class WatermarkDetector(ABC):
 
         token_scores = self._score_tokens(contexts, targets)
         score = self._aggregate_scores(token_scores)
-        p_value = self._get_p_value(score, num_scored_tokens)
+        p_value, log_p_value = self._get_statistics(score, num_scored_tokens)
         return WatermarkDetection(
             score=score,
             p_value=p_value,
             num_scored_tokens=num_scored_tokens,
             is_watermarked=p_value <= self.p_value_threshold,
+            log_p_value=log_p_value,
         )
 
     def _prepare_inputs(
@@ -64,11 +63,6 @@ class WatermarkDetector(ABC):
         prefix = [-1] * self.context_width
         for token_id in token_ids:
             context = tuple(prefix[-self.context_width :])
-            # The first `context_width` positions have an incomplete context,
-            # which generation leaves unwatermarked.
-            if self.skip_partial_contexts and any(token < 0 for token in context):
-                prefix.append(token_id)
-                continue
             # Reusing a context reuses one keyed random vector, so the resulting
             # token scores are not independent evidence.
             if not self.deduplicate_contexts or not _is_repeated_context(
@@ -98,6 +92,12 @@ class WatermarkDetector(ABC):
     @abstractmethod
     def _aggregate_scores(self, token_scores: torch.Tensor) -> float:
         raise NotImplementedError
+
+    def _get_statistics(
+        self, score: float, num_scored_tokens: int
+    ) -> tuple[float, float | None]:
+        """Return the p-value and, optionally, its natural log."""
+        return self._get_p_value(score, num_scored_tokens), None
 
     @abstractmethod
     def _get_p_value(self, score: float, num_scored_tokens: int) -> float:

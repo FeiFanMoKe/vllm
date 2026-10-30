@@ -3,6 +3,7 @@
 
 import math
 
+import numpy as np
 import pytest
 import torch
 
@@ -390,7 +391,28 @@ def test_sample_skips_rows_with_partial_contexts():
     assert torch.equal(skipped.logits[1], logits[1])
 
 
-def test_sample_propagates_candidate_bound():
+def test_sample_honors_skip_mask_without_random_sampler(monkeypatch):
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(2, 128, seed=24)
+    contexts = _random_contexts(2, seed=24)
+    skip_mask = torch.tensor([True, False])
+    captured: list[torch.Tensor] = []
+
+    def record_probs(probs: torch.Tensor, num_samples: int, **kwargs):
+        captured.append(probs)
+        return torch.zeros(probs.shape[0], num_samples, dtype=torch.int64)
+
+    monkeypatch.setattr(torch, "multinomial", record_probs)
+    sampled = watermarker.sample(logits, contexts, skip_mask=skip_mask)
+
+    expected = watermarker._mixed_logits(logits, contexts, skip_mask)
+    assert torch.equal(sampled.logits, logits)
+    assert len(captured) == 1
+    torch.testing.assert_close(captured[0], torch.softmax(expected, dim=-1))
+    torch.testing.assert_close(captured[0][0], torch.softmax(logits[0], dim=-1))
+
+
+def test_sample_propagates_support_bounds():
     watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
     logits = _random_logits(1, VOCAB_SIZE, seed=8)
     logits[:, 20:] = float("-inf")
@@ -399,10 +421,49 @@ def test_sample_propagates_candidate_bound():
     def argmax_sampler(logits: torch.Tensor) -> torch.Tensor:
         return logits.argmax(dim=-1)
 
-    argmax_sampler.candidate_bound = 20
-    sampled = watermarker.sample(logits, contexts, argmax_sampler)
+    sampled = watermarker.sample(
+        logits, contexts, argmax_sampler, support_bounds=np.array([20])
+    )
     expected = watermarker._transform_logits(logits, contexts, candidate_bound=20)
-    assert torch.equal(sampled.logits, expected)
+    assert torch.equal(sampled.token_ids, expected.argmax(dim=-1))
+    assert torch.equal(sampled.logits, logits)
+
+
+def test_sample_groups_support_bounds_and_skips_rows():
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(2, VOCAB_SIZE, seed=26)
+    logits[:, 40:] = float("-inf")
+    contexts = _random_contexts(2, seed=26)
+
+    def argmax_sampler(logits: torch.Tensor) -> torch.Tensor:
+        return logits.argmax(dim=-1)
+
+    sampled = watermarker.sample(
+        logits, contexts, argmax_sampler, support_bounds=np.array([40, -1])
+    )
+    expected = watermarker._transform_logits(
+        logits[:1], contexts[:1], candidate_bound=40
+    )
+    assert sampled.token_ids[0] == expected.argmax(dim=-1)[0]
+    assert sampled.token_ids[1] == logits[1].argmax()
+    assert torch.equal(sampled.logits, logits)
+
+
+def test_transform_batch_groups_and_chunks(monkeypatch):
+    watermarker = SynthIDWatermarker(KEY, CONTEXT_WIDTH, DEPTH)
+    logits = _random_logits(3, 128, seed=27)
+    contexts = _random_contexts(3, seed=27)
+
+    monkeypatch.setattr("vllm.v1.watermarking.synthid._FULL_SUPPORT_ROW_CHUNK", 1)
+    actual = watermarker._transform_batch(logits, contexts, np.array([128, 0, -1]))
+
+    bounded = watermarker._transform_logits(
+        logits[:1], contexts[:1], candidate_bound=128
+    )
+    exact = watermarker._transform_logits(logits[1:2], contexts[1:2])
+    _assert_same_distribution(actual[:1], bounded)
+    _assert_same_distribution(actual[1:2], exact)
+    assert torch.equal(actual[2], logits[2])
 
 
 def test_invalid_parameters_rejected():
@@ -420,14 +481,32 @@ def test_invalid_parameters_rejected():
         SynthIDWatermarker(KEY, max_probability=0.0)
     with pytest.raises(ValueError):
         SynthIDWatermarker(KEY, max_probability=1.5)
-    with pytest.raises(ValueError):
-        SynthIDWatermarker(KEY, context_history_size=0)
+    with pytest.raises(ValueError, match="64 bits"):
+        SynthIDWatermarker(-1)
     with pytest.raises(ValueError):
         SynthIDWatermarkDetector(KEY, depth=0)
     with pytest.raises(ValueError):
         SynthIDWatermarkDetector(KEY, depth=129)
     with pytest.raises(ValueError):
-        SynthIDWatermarkDetector(KEY, context_history_size=0)
+        SynthIDWatermarkDetector(KEY, deduplicate_contexts_max_history=0)
+    with pytest.raises(ValueError, match="64 bits"):
+        SynthIDWatermarkDetector(2**64)
+
+
+def test_detector_from_config_matches_watermark_config():
+    config = WatermarkConfig(
+        key=KEY,
+        algorithm="synthid",
+        synthid_depth=8,
+        context_width=6,
+        deduplicate_contexts="none",
+    )
+    detector = SynthIDWatermarkDetector.from_config(config)
+
+    assert detector.depth == 8
+    assert detector.context_width == 6
+    assert detector.deduplicate_contexts
+    assert detector.deduplicate_contexts_max_history == 1024
 
 
 def test_binomial_survival_matches_closed_form():
@@ -446,14 +525,13 @@ def test_factory_creates_synthid_watermarker():
         synthid_depth=8,
         synthid_strength=0.5,
         synthid_max_probability=0.75,
-        synthid_context_history_size=512,
     )
     watermarker = create_watermarker(config)
     assert isinstance(watermarker, SynthIDWatermarker)
     assert watermarker.depth == 8
     assert watermarker.strength == 0.5
     assert watermarker.max_probability == 0.75
-    assert watermarker.dedup_history_size == 512
+    assert config.deduplicate_contexts_max_history == 1024
 
 
 @pytest.mark.skipif(
@@ -589,7 +667,7 @@ def test_transform_deep_cuda_falls_back():
 
 def test_detector_context_history_window():
     detector = SynthIDWatermarkDetector(
-        KEY, CONTEXT_WIDTH, DEPTH, context_history_size=1024
+        KEY, CONTEXT_WIDTH, DEPTH, deduplicate_contexts_max_history=1024
     )
     tokens = [1, 2, 3, 4] + [5] * 1030 + [1, 2, 3, 4] + [6]
     result = detector.detect(tokens)
@@ -627,3 +705,29 @@ def test_binomial_log_survival_matches_probability():
     for k, n in ((1, 10), (3, 10), (8, 10), (50, 100)):
         expected = math.log(_binomial_survival(k, n))
         assert _binomial_log_survival(k, n) == pytest.approx(expected, rel=1e-9)
+
+
+@pytest.mark.skipif(
+    not current_platform.is_cuda_alike(), reason="requires a CUDA-like accelerator"
+)
+def test_top_k_support_matches_candidate_bound_assumption():
+    """Record the support that ``_get_candidate_bounds`` assumes."""
+    from vllm.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p
+
+    top_k = torch.tensor([10], device="cuda", dtype=torch.int32)
+
+    distinct = torch.randn(1, 64, device="cuda")
+    limited = apply_top_k_top_p(distinct.clone(), top_k, None)
+    assert torch.isfinite(limited).sum().item() <= 10
+
+    boundary_ties = torch.zeros(1, 64, device="cuda")
+    boundary_ties[0, :20] = 1.0
+    limited = apply_top_k_top_p(boundary_ties.clone(), top_k, None)
+    assert torch.isfinite(limited).sum().item() == 10
+
+    # Known deviation: all-equal finite logits hit the no-mask fallback, so
+    # the realized support exceeds the top-k bound. Pin it until a fix lands;
+    # see the TODO in GPUWatermarkSampler._get_candidate_bounds.
+    all_equal = torch.zeros(1, 64, device="cuda")
+    limited = apply_top_k_top_p(all_equal.clone(), top_k, None)
+    assert torch.isfinite(limited).sum().item() == 64

@@ -105,7 +105,7 @@ def test_watermarker_contract(algorithm: str):
     assert torch.equal(first.token_ids, second.token_ids)
 
 
-@pytest.mark.parametrize("algorithm", ["gumbel", "dual_key_gumbel"])
+@pytest.mark.parametrize("algorithm", ["gumbel", "dual_key_gumbel", "synthid"])
 @pytest.mark.parametrize(
     "config_overrides",
     [
@@ -113,7 +113,7 @@ def test_watermarker_contract(algorithm: str):
         {"deduplicate_contexts_max_history": 1023},
     ],
 )
-def test_gumbel_config_warns_when_context_deduplication_is_weak(
+def test_config_warns_when_context_deduplication_is_weak(
     monkeypatch, algorithm, config_overrides
 ):
     messages: list[str] = []
@@ -129,8 +129,8 @@ def test_gumbel_config_warns_when_context_deduplication_is_weak(
 
     assert messages == [
         (
-            "Gumbel-max watermarking with context deduplication disabled "
-            "or limited to fewer than 1024 positions may increase the frequency of "
+            "Watermarking with context deduplication disabled or limited to "
+            "fewer than 1024 positions may increase the frequency of "
             "degenerate generations, including repetition loops. Use "
             "deduplicate_contexts='single_turn' or 'all' with "
             "deduplicate_contexts_max_history at least 1024 or null to mitigate this."
@@ -391,7 +391,14 @@ def test_gpu_sampler_filters_top_k_top_p_before_watermarking(
         context_width = 1
         captured_logits = None
 
-        def sample(self, logits, contexts, random_sampler=None, skip_mask=None):
+        def sample(
+            self,
+            logits,
+            contexts,
+            random_sampler=None,
+            skip_mask=None,
+            support_bounds=None,
+        ):
             self.captured_logits = logits
             return WatermarkSample(logits.argmax(dim=-1), logits)
 
@@ -421,17 +428,49 @@ def test_gpu_sampler_filters_top_k_top_p_before_watermarking(
     assert sampled.item() in (0, 1)
 
 
-def test_gpu_sampler_candidate_bound_uses_cpu_top_k_state():
+def test_gpu_sampler_candidate_bounds_use_cpu_state():
     sampler = object.__new__(GPUWatermarkSampler)
+    min_p = np.zeros(2, dtype=np.float32)
     sampler.sampling_states = SimpleNamespace(
-        top_k=SimpleNamespace(np=np.array([20, 50], dtype=np.int32))
+        top_k=SimpleNamespace(np=np.array([20, 50], dtype=np.int32)),
+        min_p=SimpleNamespace(np=min_p),
+        vocab_size=128,
     )
     top_k = torch.tensor([20, 50])
+    top_p = torch.tensor([1.0, 1.0])
     rows = np.array([0, 1])
+    enabled = np.array([True, True])
 
-    assert sampler._get_candidate_bound(top_k, rows, exact_support=True) == 50
-    assert sampler._get_candidate_bound(top_k, rows, exact_support=False) is None
-    assert sampler._get_candidate_bound(None, rows, exact_support=True) is None
+    np.testing.assert_array_equal(
+        sampler._get_candidate_bounds(top_k, None, rows, enabled, exact_support=True),
+        np.array([20, 50]),
+    )
+    np.testing.assert_array_equal(
+        sampler._get_candidate_bounds(top_k, None, rows, enabled, exact_support=False),
+        np.array([0, 0]),
+    )
+    np.testing.assert_array_equal(
+        sampler._get_candidate_bounds(None, top_p, rows, enabled, exact_support=True),
+        np.array([0, 0]),
+    )
+    np.testing.assert_array_equal(
+        sampler._get_candidate_bounds(None, None, rows, enabled, exact_support=True),
+        np.array([128, 128]),
+    )
+    min_p[1] = 0.1
+    np.testing.assert_array_equal(
+        sampler._get_candidate_bounds(None, None, rows, enabled, exact_support=True),
+        np.array([0, 0]),
+    )
+    enabled[1] = False
+    np.testing.assert_array_equal(
+        sampler._get_candidate_bounds(None, None, rows, enabled, exact_support=True),
+        np.array([128, -1]),
+    )
+    padded_bounds = sampler._get_candidate_bounds(
+        top_k, None, np.array([0, -1]), np.array([True, True]), exact_support=True
+    )
+    np.testing.assert_array_equal(padded_bounds, np.array([20, -1]))
 
 
 def test_watermark_context_ignores_prefix_cache_bookkeeping():
@@ -472,6 +511,9 @@ def test_gpu_sampler_skips_watermarking_for_repeated_contexts(monkeypatch):
     sampler.sampling_states = SimpleNamespace(
         temperature=SimpleNamespace(np=np.ones(2), gpu=torch.ones(2)),
         seeds=SimpleNamespace(gpu=torch.zeros(2, dtype=torch.int64)),
+        top_k=SimpleNamespace(np=np.full(2, 8, dtype=np.int32)),
+        min_p=SimpleNamespace(np=np.zeros(2, dtype=np.float32)),
+        vocab_size=8,
     )
     sampler.use_fp64_gumbel = False
     sampler._get_contexts = lambda expanded_idx_mapping: torch.zeros(
@@ -511,6 +553,9 @@ def test_gpu_sampler_can_disable_context_deduplication(monkeypatch):
     sampler.sampling_states = SimpleNamespace(
         temperature=SimpleNamespace(np=np.ones(2), gpu=torch.ones(2)),
         seeds=SimpleNamespace(gpu=torch.zeros(2, dtype=torch.int64)),
+        top_k=SimpleNamespace(np=np.full(2, 8, dtype=np.int32)),
+        min_p=SimpleNamespace(np=np.zeros(2, dtype=np.float32)),
+        vocab_size=8,
     )
     sampler.use_fp64_gumbel = False
     sampler._get_contexts = lambda expanded_idx_mapping: torch.zeros(
@@ -935,6 +980,9 @@ def test_gpu_sampler_uses_fused_gumbel_for_repeated_contexts():
     sampler.sampling_states = SimpleNamespace(
         temperature=SimpleNamespace(np=np.ones(2), gpu=temperatures),
         seeds=SimpleNamespace(gpu=seeds),
+        top_k=SimpleNamespace(np=np.full(2, 8, dtype=np.int32)),
+        min_p=SimpleNamespace(np=np.zeros(2, dtype=np.float32)),
+        vocab_size=8,
     )
     sampler.req_states = SimpleNamespace(
         all_token_ids=SimpleNamespace(gpu=all_token_ids),
