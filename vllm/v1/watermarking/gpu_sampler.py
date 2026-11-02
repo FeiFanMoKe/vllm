@@ -109,6 +109,33 @@ class GPUWatermarkSampler(Sampler):
                 exact_support=HAS_TRITON and processed_logits.device.type != "cpu",
             )
 
+        if getattr(self.watermarker, "supports_fused_sampling", False):
+            transformed = self.watermarker.transform_logits(
+                processed_logits,
+                contexts,
+                skip_mask,
+                support_bounds,
+            )
+            # Reuse the base sampler: it applies top-k/top-p once on the
+            # transformed logits when fused, and otherwise just samples.
+            sample_top_k = top_k if use_fused_sampler else None
+            sample_top_p = top_p if use_fused_sampler else None
+            sampled, _ = super()._sample_random(
+                transformed,
+                expanded_idx_mapping,
+                idx_mapping_np,
+                pos,
+                sample_top_k,
+                sample_top_p,
+                use_fused_sampler,
+            )
+            sampled = torch.where(
+                temperatures == 0,
+                processed_logits.argmax(dim=-1),
+                sampled,
+            )
+            return sampled, processed_logits
+
         random_sampler = RandomSampler(
             expanded_idx_mapping=expanded_idx_mapping,
             temperatures=self.sampling_states.temperature.gpu,
@@ -155,7 +182,7 @@ class GPUWatermarkSampler(Sampler):
         if (
             top_k is None
             and top_p is None
-            and not np.any(self.sampling_states.min_p.np[idx_mapping_np])
+            and not np.any(self.sampling_states.min_p.np[idx_mapping_np[active]])
         ):
             # No truncation: the full vocabulary is the exact support, so the
             # bound can be used without a device-to-host synchronization.

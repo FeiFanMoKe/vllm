@@ -46,9 +46,20 @@ class RandomSampler:
 
 
 class Watermarker(ABC):
+    supports_fused_sampling = False
+
     @property
     @abstractmethod
     def context_width(self) -> int:
+        raise NotImplementedError
+
+    def transform_logits(
+        self,
+        logits: torch.Tensor,
+        contexts: torch.Tensor,
+        skip_mask: torch.Tensor | None = None,
+        support_bounds: np.ndarray | None = None,
+    ) -> torch.Tensor:
         raise NotImplementedError
 
     def sample(

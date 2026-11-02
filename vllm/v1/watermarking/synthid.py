@@ -50,6 +50,8 @@ class SynthIDWatermarker(Watermarker):
     sampled without the watermark, as in the reference implementation.
     """
 
+    supports_fused_sampling = True
+
     def __init__(
         self,
         key: int,
@@ -211,6 +213,15 @@ class SynthIDWatermarker(Watermarker):
             max_prob = logits.to(torch.float32).softmax(dim=-1).amax(dim=-1)
             skip = skip | (max_prob > self.max_probability)
         return torch.where(skip.unsqueeze(-1), logits, transformed)
+
+    def transform_logits(
+        self,
+        logits: torch.Tensor,
+        contexts: torch.Tensor,
+        skip_mask: torch.Tensor | None = None,
+        support_bounds: np.ndarray | None = None,
+    ) -> torch.Tensor:
+        return self._mixed_logits(logits, contexts, skip_mask, support_bounds)
 
     def sample(
         self,
